@@ -1,0 +1,156 @@
+ARCHITECTURE OVERVIEW:
+This is an application intended to help with chest CT imaging research for interstitial
+lung diseases. STAGE 1 (current) builds only the imaging foundation:
+  1. Full DICOM CT series upload + 3D volume reconstruction
+  2. A professional multi-planar CT viewer (axial / coronal / sagittal)
+No disease-detection AI, segmentation, or diagnostic features are implemented at this
+stage. The project is hosted on Vercel using serverless functions for the Python backend.
+
+CONSTRAINTS & RULES FOR AI GENERATION:
+1. Backend: Flask, routed through `api/index.py`. DICOM validation, slice ordering,
+   HU conversion, and volume construction logic remain centralized in `api/index.py`
+   (see NEXT_TASKS.md for the incremental build order). As of the 3D lung
+   reconstruction feature, two focused modules were added alongside it rather than
+   growing `api/index.py` indefinitely: `api/lung_segmentation.py` (rule-based lung
+   extraction) and `api/mesh_reconstruction.py` (marching-cubes + coordinate-system
+   transform). `api/index.py` still owns all Flask routes; the modules contain no
+   routes or UI code, only pure segmentation/reconstruction logic, per the explicit
+   "dedicated module, not routes/UI" requirement for that feature. `vercel.json`
+   was updated (`includeFiles`) so these sibling modules deploy with the function.
+2. Frontend: We are using a multi-page architecture. Each distinct view MUST have its
+   own dedicated HTML file located inside the `templates/` directory.
+3. Hosting: The project uses Vercel. Do not alter `vercel.json` without explicit
+   instruction.
+4. Data handling: No external market-data or third-party medical APIs are used. All
+   DICOM parsing and processing happens strictly in the single backend file and is
+   passed to the frontend templates. Medical images are never sent to external
+   (including AI/LLM) services.
+5. Two design systems, one product identity: the PUBLIC site (index.html) is
+   cinematic, spacious, and scroll-driven; the CLINICAL workspace (cases,
+   case workspace, dashboard, viewer) is dense, fast, and minimally animated.
+   They share the mark, name, and typeface only. No marketing media is ever
+   loaded on an authenticated page.
+6. Higgsfield boundary: Higgsfield produces PUBLIC marketing/educational media
+   only. It is never called during a page request, never receives DICOM files,
+   imaging arrays, patient identifiers, notes, or case data, and its output is
+   never medical evidence and never appears in the clinical workspace. The key
+   lives in HIGGSFIELD_API_KEY and is used server-side only.
+7. Environment variables: SECRET_KEY (session signing), DATABASE_PATH (SQLite
+   location), STUDY_STORE_PATH (reconstructed study volumes; default
+   ./instance/studies, gitignored), STUDY_CACHE_SIZE (studies held in RAM,
+   default 3), HIGGSFIELD_API_KEY (marketing media, optional), GROQ_API_KEY
+   (pre-existing), PORT (local dev; macOS ControlCenter occupies 5000).
+   Both DATABASE_PATH and STUDY_STORE_PATH must point at durable, SHARED
+   storage for a real multi-instance deployment - local disk is per-instance
+   and ephemeral on a serverless host. See ARCHITECTURE_AUDIT.md section 4.
+
+   Added for the imaging-relational layer (api/models.py):
+   IMAGING_DATABASE_URL (SQLAlchemy URL for ImagingStudy/ImagingSeries/
+   ProcessingJob/RegionOfInterest/Measurement/Annotation; default a SQLite
+   file at ./instance/imaging.db, deliberately separate from
+   vitalitysync.db - see api/db_engine.py's module docstring for why),
+   ASSET_STORAGE_BACKEND (local | s3, default local), ASSET_STORAGE_LOCAL_PATH,
+   S3_BUCKET / S3_PREFIX / S3_ENDPOINT_URL / S3_REGION (api/asset_storage.py;
+   AWS credentials come from boto3's normal credential chain, never hardcoded).
+8. Medical/imaging safety:
+   - No disease classification, segmentation, or diagnostic AI yet.
+   - No claims of HIPAA compliance, FDA approval, clinical validation, or diagnostic
+     capability anywhere in the app or docs.
+   - Patient-identifying DICOM metadata must never be displayed in the application.
+   - Uploaded DICOM files, generated volumes, and caches are never committed to git.
+   - Test fixtures must use synthetic DICOM data only, never real patient data.
+
+DIRECTORY STRUCTURE (at the beginning for future reference):
+/
+├── api/
+│   ├── index.py            # Flask routes: public site, auth, cases/notes, and the
+│   │                        # DICOM pipeline (upload, validation, slice ordering, HU
+│   │                        # conversion, 2D slice rendering, segment-lungs,
+│   │                        # reconstruct3d, volume-texture, geometry).
+│   ├── db.py               # SQLite schema/connection: doctors, cases, case_access,
+│   │                        # notes, audit_log. Stdlib sqlite3 only, no ORM.
+│   ├── auth.py             # Password hashing, sessions, login_required /
+│   │                        # api_login_required, and the SINGLE case-authorization
+│   │                        # check (doctor_can_access_case).
+│   ├── cases.py            # Case + note CRUD. Contains no authorization logic -
+│   │                        # that lives only in auth.py, called from the routes.
+│   ├── study_store.py      # Durable, memory-bounded storage for reconstructed
+│   │                        # studies. Volumes are .npy on disk and memory-mapped on
+│   │                        # read; segmentation masks are bit-packed; an LRU keeps
+│   │                        # only STUDY_CACHE_SIZE studies resident. Studies now
+│   │                        # survive a restart. Dict-like API (get/pop/in/[]).
+│   ├── quantitative_analysis.py # Structured measurement engine: scan quality, lung and
+│   │                             # per-side volumes, HU statistics and percentiles, fixed-grid
+│   │                             # density histograms, superior-inferior zones and pleural
+│   │                             # distance bands, asymmetry, and provenance. Every value is
+│   │                             # deterministic; no model contributes. Capabilities the app
+│   │                             # lacks (lobes, findings, airways, vessels, texture radiomics,
+│   │                             # longitudinal comparison) return NOT_AVAILABLE with a reason.
+│   ├── lung_segmentation.py    # Rule-based (NOT AI) lung extraction: HU thresholding,
+│   │                            # body mask, 3D connected components, plausibility gates.
+│   ├── mesh_reconstruction.py  # VolumeGeometry (the single source of truth for the
+│   │                            # volume<->DICOM-patient-space transform) + marching-cubes
+│   │                            # surface generation at true physical voxel spacing.
+│   ├── models.py               # SQLAlchemy models: ImagingStudy, ImagingSeries,
+│   │                            # ProcessingJob, RegionOfInterest, Measurement, Annotation.
+│   │                            # A separate relational layer from db.py by design - see
+│   │                            # ARCHITECTURE_AUDIT.md section 7 and this file's own
+│   │                            # module docstring for why.
+│   ├── db_engine.py            # SQLAlchemy engine/session factory for models.py
+│   │                            # (IMAGING_DATABASE_URL env var; sqlite for local dev,
+│   │                            # postgres for the eventual managed-DB target).
+│   ├── measurements.py         # CRUD for the imaging-relational tables. No authorization
+│   │                            # logic (same convention as cases.py) - callers must have
+│   │                            # already resolved the study through
+│   │                            # index.py's _get_owned_study_or_error.
+│   └── asset_storage.py        # Private medical-asset storage abstraction: local disk
+│                                # (default) or an S3-compatible bucket (S3/R2/MinIO), never
+│                                # a publicly served static directory. study_store.py does
+│                                # not use this yet - see this file's module docstring.
+├── templates/
+│   │   PUBLIC (cinematic, scroll-driven, no auth):
+│   ├── index.html          # Premium product website. All anatomical visuals are
+│   │                        # SYNTHETIC and drawn procedurally in-canvas; the page makes
+│   │                        # zero external asset requests. Honors prefers-reduced-motion.
+│   ├── login.html          # Doctor sign-in. Deliberately carries no marketing media.
+│   │   CLINICAL (dense, fast, minimal motion, auth required):
+│   ├── cases.html          # Case list: filters, search, status.
+│   ├── case_workspace.html # Per-case: overview, imaging, 3D, measurements, notes.
+│   ├── dashboard.html      # DICOM import + validation report
+│   └── viewer.html         # CT workspace: axial/coronal/sagittal 2D viewer plus the
+│                            # interactive 3D lung reconstruction (Three.js surface
+│                            # rendering + GPU volume raycasting), linked by crosshair.
+├── marketing_media/         # PUBLIC media pipeline - strictly separated from imaging.
+│   ├── higgsfield/guard.py  # THE privacy boundary: allow-list of reviewed prompts,
+│   │                         # type check that structurally blocks arrays/DICOM/bytes,
+│   │                         # and a clinical-vocabulary block-list. Fails closed.
+│   ├── higgsfield/client.py # Server-side request builder + asset manifest. Offline
+│   │                         # build step - never called during a page request.
+│   ├── prompts/             # Reviewed nonclinical prompt catalog (approved_prompts.json)
+│   ├── manifests/           # Reviewed, optimized assets the website may use
+│   └── assets/              # (gitignored) generated media
+├── manage.py                # Admin CLI: create-doctor, list-doctors, seed-demo, audit.
+│                            # No default or hardcoded accounts exist anywhere.
+├── migrations/              # Alembic migrations for api/models.py (imaging-relational
+│                            # layer only - db.py's tables are not Alembic-managed; see
+│                            # DATABASE_DESIGN.md). Run `alembic upgrade head` out-of-band,
+│                            # never at request time.
+├── alembic.ini              # Points at IMAGING_DATABASE_URL via migrations/env.py.
+├── tests/                   # Synthetic-data-only test suites. `python tests/run_all.py`
+│                            # runs everything. See tests/requirements-test.txt for
+│                            # test-only deps (kept out of the deployed function).
+├── uploads/                 # (gitignored) temporary DICOM upload staging — never committed
+├── DICOM_PIPELINE.md        # Spec: validation, spatial slice ordering, HU conversion,
+│                             # volume construction
+├── CT_VIEWER_SPEC.md        # Spec: axial/coronal/sagittal viewer, windowing, crosshairs
+├── NEXT_TASKS.md            # Incremental implementation task breakdown
+├── ARCHITECTURE_AUDIT.md    # Snapshot audit: what exists, what's sound, what's weak,
+│                            # the hosting fork, migration risks, phased plan
+├── DATABASE_DESIGN.md       # The db.py / models.py split, schema, and why
+├── ASSET_STORAGE.md         # Private asset storage backends and how to switch them
+├── .gitignore
+├── .env
+├── requirements.txt
+├── requirements-dev.txt     # alembic + boto3 - ops/dev only, never deployed
+├── structure.txt           # This file
+└── vercel.json             # Vercel deployment configuration

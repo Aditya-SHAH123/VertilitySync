@@ -1,0 +1,10 @@
+Flask
+groq
+pandas
+python-dotenv
+pydicom
+numpy
+Pillow
+scipy
+scikit-image
+SQLAlchemy

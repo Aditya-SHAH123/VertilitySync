@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Doctor Sign In — VitalitySync</title>
+    <style>
+        /* Deliberately minimal: the login page carries none of the public
+           site's cinematic media or scroll animation. */
+        :root {
+            --bg: #0b0f16; --panel: #131923; --line: #1f2836;
+            --text: #e6ebf2; --muted: #8b98ab; --accent: #3b82f6;
+            --danger: #f87171;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            background: var(--bg); color: var(--text); padding: 24px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .card { width: 100%; max-width: 400px; }
+        .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+        .brand .mark { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(140deg, #3b82f6, #1e40af); }
+        .brand .name { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+        h1 { font-size: 1.35rem; margin: 0 0 6px; letter-spacing: -0.02em; }
+        .sub { color: var(--muted); font-size: 0.85rem; margin: 0 0 24px; }
+
+        form { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 22px; }
+        label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 6px; }
+        input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+                border-radius: 6px; padding: 10px 12px; font-size: 0.92rem; margin-bottom: 16px; }
+        input:focus { outline: none; border-color: var(--accent); }
+        button { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 6px;
+                 padding: 11px; font-size: 0.92rem; font-weight: 600; cursor: pointer; }
+        button:hover:not(:disabled) { background: #2563eb; }
+        button:disabled { opacity: 0.55; cursor: not-allowed; }
+
+        .error { display: none; background: #2a1416; border: 1px solid #5b2226; color: var(--danger);
+                 border-radius: 6px; padding: 10px 12px; font-size: 0.85rem; margin-bottom: 16px; }
+        .error.visible { display: block; }
+
+        .foot { margin-top: 18px; font-size: 0.75rem; color: var(--muted); line-height: 1.6; }
+        .foot a { color: var(--muted); }
+        .back { display: inline-block; margin-top: 20px; color: var(--muted); font-size: 0.82rem; text-decoration: none; }
+        .back:hover { color: var(--text); }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="brand">
+        <div class="mark"></div>
+        <div class="name">VitalitySync</div>
+    </div>
+
+    <h1>Doctor Sign In</h1>
+    <p class="sub">Access to the clinical workspace is restricted to authorized accounts.</p>
+
+    <form id="loginForm" autocomplete="on">
+        <div class="error" id="errorBox"></div>
+
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" autocomplete="username" required>
+
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+
+        <button type="submit" id="submitBtn">Sign In</button>
+    </form>
+
+    <p class="foot">
+        Credentials are verified on the server and passwords are stored only as
+        salted hashes. Sessions use a signed, HttpOnly cookie. Access to every
+        case is re-checked server-side on each request.
+        <br><br>
+        Password reset is not yet implemented — contact your administrator to
+        restore access.
+    </p>
+
+    <a class="back" href="/">&larr; Back to vitalitysync.com</a>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('loginForm');
+    const errorBox = document.getElementById('errorBox');
+    const submitBtn = document.getElementById('submitBtn');
+    const nextUrl = {{ next | tojson }};
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        errorBox.classList.remove('visible');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in…';
+
+        try {
+            const resp = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email').value,
+                    password: document.getElementById('password').value,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                errorBox.textContent = data.message || 'Sign in failed.';
+                errorBox.classList.add('visible');
+                return;
+            }
+            window.location.href = nextUrl || data.redirect || '/cases';
+        } catch (err) {
+            errorBox.textContent = 'Network error while signing in.';
+            errorBox.classList.add('visible');
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Sign In';
+        }
+    });
+})();
+</script>
+</body>
+</html>

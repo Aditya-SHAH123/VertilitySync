@@ -1,0 +1,152 @@
+{% extends "public_base.html" %}
+{% set page = "safety" %}
+{% block title %}VitalitySync Safety and Limits{% endblock %}
+{% block description %}What VitalitySync deliberately does not do, how imaging data is handled, and its known limitations.{% endblock %}
+{% block content %}
+<header class="page-head">
+    <div class="wrap">
+        <div class="crumbs"><a href="/">Overview</a><span>/</span><span>Safety &amp; Limits</span></div>
+        <h1 class="display" style="font-size:clamp(2.2rem,5vw,3.6rem);">A tool is more useful<br>when its limits are explicit.</h1>
+        <p class="lede">This page exists because the honest answer to &ldquo;what can it do?&rdquo; includes everything it cannot.</p>
+    </div>
+</header>
+
+<section class="band">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">Boundaries</p>
+            <h2 class="headline">What it deliberately does not do.</h2>
+            <p class="lede">A visualization tool is more useful when its limits are explicit than when they are implied.</p>
+        </div>
+        <div class="bounds reveal d1">
+            <div>
+                <h4>Not implemented, and not claimed</h4>
+                <ul class="notlist">
+                    <li>Disease classification of any kind</li>
+                    <li>Fibrosis, ground-glass, or nodule detection</li>
+                    <li>Lobe segmentation and airway or vessel trees</li>
+                    <li>Abnormality probability or heat maps</li>
+                    <li>Radiology-report or clinical-note analysis</li>
+                    <li>Treatment recommendation or clinical decisions</li>
+                    <li>HIPAA compliance, FDA clearance, or clinical validation</li>
+                </ul>
+            </div>
+            <div>
+                <h4>How imaging data is handled</h4>
+                <p class="lede" style="font-size:0.87rem; margin-top:0;">Uploaded files are parsed in memory. Only an explicit allow-list of non-identifying technical fields is ever read from a dataset:</p>
+                <div class="taglist">
+                    <code>Modality</code><code>Manufacturer</code><code>ManufacturerModelName</code>
+                    <code>KVP</code><code>SliceThickness</code><code>PhotometricInterpretation</code>
+                </div>
+                <p class="lede" style="font-size:0.87rem;">Patient name, identifiers, birth date, and accession number are never accessed, displayed, or stored. No imaging data is sent to any external service, including any AI or media-generation service. Every anatomical image on this page is synthetic and drawn procedurally in your browser.</p>
+            </div>
+        </div>
+    </div>
+</section>
+<section class="band" style="border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Known limitations</p>
+      <h2 class="headline">Where it is not yet reliable.</h2>
+      <p class="lede">Stated plainly, because a tool whose weaknesses are documented is safer than one whose weaknesses are discovered.</p>
+    </div>
+    <div class="stages reveal d1">
+      <div class="stage">
+        <div class="num">01</div>
+        <div><h4>Segmentation is threshold-based</h4><p class="what">It selects air-density regions inside the body. Anything sharing that density range can be included, and pathology that changes lung density can cause under-inclusion.</p></div>
+        <p class="onfail">It has <b>not been validated</b> against expert manual segmentation. No accuracy figure is claimed.</p>
+      </div>
+      <div class="stage">
+        <div class="num">02</div>
+        <div><h4>The left/right division is approximate</h4><p class="what">When the lungs form one connected region through the airway, they are separated at the sagittal midline rather than by true anatomical boundary.</p></div>
+        <p class="onfail">Per-lung volumes near the mediastinum should be treated as <b>estimates</b>.</p>
+      </div>
+      <div class="stage">
+        <div class="num">03</div>
+        <div><h4>Lobes, airways, and vessels are not separated</h4><p class="what">The mask is a single lung region. Internal holes are filled to produce a solid, meshable surface.</p></div>
+        <p class="onfail">Structures inside the lung are <b>not individually identified</b>.</p>
+      </div>
+      <div class="stage">
+        <div class="num">04</div>
+        <div><h4>Large studies are memory-intensive</h4><p class="what">Peak memory runs at roughly seven times the reconstructed volume, so a 400-slice study approaches three gigabytes during segmentation.</p></div>
+        <p class="onfail">Very large series may <b>exceed available memory</b> on constrained hosts.</p>
+      </div>
+      <div class="stage">
+        <div class="num">05</div>
+        <div><h4>Measurements are session-only</h4><p class="what">Distances taken in the viewer are computed from physical coordinates but are not saved to the case.</p></div>
+        <p class="onfail">Persistent measurement is <b>not yet implemented</b>.</p>
+      </div>
+      <div class="stage">
+        <div class="num">06</div>
+        <div><h4>Point selection needs a surface</h4><p class="what">Selecting a location resolves by intersecting the lung surface, so it is unavailable in volume-only rendering.</p></div>
+        <p class="onfail">The viewer <b>says so</b> rather than ignoring the click.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="band" style="background: var(--bg-soft); border-top: 1px solid var(--line);">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">Questions</p>
+            <h2 class="headline">Before you import a study.</h2>
+        </div>
+        <div class="faq reveal d1">
+            <details>
+                <summary>What exactly do I need to upload?</summary>
+                <div class="ans">
+                    <p>The original DICOM series — the folder of <code>.dcm</code> files a scanner produces, typically hundreds of them for a chest CT.</p>
+                    <p>A photograph of a scan on a screen, a screenshot, or an exported JPEG will not work, and the limitation is not cosmetic. Those formats carry brightness, not calibrated tissue density; they carry no slice position, no orientation, and no physical spacing. Reconstruction needs all of it. The validator refuses such input rather than producing something that looks plausible.</p>
+                </div>
+            </details>
+            <details>
+                <summary>Does it tell me whether something is wrong with the lungs?</summary>
+                <div class="ans">
+                    <p>No. There is no disease classification, no abnormality detection, and no diagnostic model anywhere in the system, by design. It reconstructs and displays what is already in the scan.</p>
+                    <p>The architecture leaves room for overlay layers to be added later, but nothing of that kind is implemented, and no placeholder is presented as though it works.</p>
+                </div>
+            </details>
+            <details>
+                <summary>Is the 3D model actually built from my scan?</summary>
+                <div class="ans">
+                    <p>Yes. The surface is generated from that study's own voxels by marching cubes at its own physical spacing. No generic or prebuilt anatomical model is ever substituted.</p>
+                    <p>If segmentation cannot confidently isolate the lungs, you get a stated failure with the reason — not a stand-in model.</p>
+                </div>
+            </details>
+            <details>
+                <summary>How accurate is the reconstruction?</summary>
+                <div class="ans">
+                    <p>Geometry, spacing, and orientation are carried through from the source study rather than approximated, and the high-fidelity mesh is built at native resolution with no downsampling.</p>
+                    <p>That said, segmentation is threshold-based. It will include air-filled structures that fall inside the same density range and can be affected by pathology that changes lung density. It has not been validated against expert manual segmentation, and no accuracy figure is claimed. Inspect the original slices alongside the model.</p>
+                </div>
+            </details>
+            <details>
+                <summary>Why are there two quality modes?</summary>
+                <div class="ans">
+                    <p>Interactive downsamples the mask to at most 160 voxels per axis so rotation stays responsive on a large study. High Fidelity uses the full native resolution.</p>
+                    <p>They are kept as separate representations. The simplified mesh is labelled wherever it appears and is never used for measurement or presented as the reference.</p>
+                </div>
+            </details>
+            <details>
+                <summary>Does my imaging data leave the application?</summary>
+                <div class="ans">
+                    <p>No. Files are parsed in memory, and only six non-identifying technical fields are ever read from a dataset. No pixel data or metadata is transmitted to any external service, including AI and media-generation services.</p>
+                    <p>Patient-identifying fields are never accessed at all — not read, not displayed, not stored.</p>
+                </div>
+            </details>
+            <details>
+                <summary>Can I use this clinically?</summary>
+                <div class="ans">
+                    <p>No. This is a visualization and research tool. It is not a certified medical device, it has no regulatory clearance, and it makes no claim of clinical validation. Nothing it displays is a diagnosis.</p>
+                </div>
+            </details>
+        </div>
+    </div>
+</section>
+<section class="band" style="border-top:1px solid var(--line);">
+  <div class="wrap"><div class="next-links reveal">
+    <a class="next-card" href="/technology"><div class="k">Back</div><div class="t">Technology</div><p class="d">How a study becomes a reconstruction.</p></a>
+    <a class="next-card" href="/specifications"><div class="k">Back</div><div class="t">Specifications</div><p class="d">Parameters, coordinates, and measured performance.</p></a>
+  </div></div>
+</section>
+{% endblock %}

@@ -1,0 +1,219 @@
+{% extends "public_base.html" %}
+{% set page = "technology" %}
+{% block title %}VitalitySync Technology{% endblock %}
+{% block description %}The reconstruction pipeline: eight stages from DICOM to surface, sixteen validation checks, and the rule-based lung isolation method.{% endblock %}
+{% block content %}
+<header class="page-head">
+    <div class="wrap">
+        <div class="crumbs"><a href="/">Overview</a><span>/</span><span>Technology</span></div>
+        <h1 class="display" style="font-size:clamp(2.2rem,5vw,3.6rem);">From a stack of<br>images to a volume.</h1>
+        <p class="lede">Every stage of the reconstruction is documented, including what causes it to stop. Nothing here is a trained model &mdash; the method is classical image processing, and it is labelled as such everywhere it appears.</p>
+    </div>
+</header>
+
+<section class="band" style="border-top: 1px solid var(--line);">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">The pipeline</p>
+            <h2 class="headline">Eight stages, and what stops each one.</h2>
+            <p class="lede">Every stage consumes the previous stage's output, so a failure part-way through halts the run rather than producing a degraded result.</p>
+        </div>
+
+        <div class="stages reveal d1">
+            <div class="stage">
+                <div class="num">01</div>
+                <div><h4>Read the series</h4><p class="what">Multi-file DICOM upload, parsed entirely in memory.</p></div>
+                <p class="onfail">A file that cannot be decoded is marked <b>FAIL</b> individually; the remaining slices still proceed.</p>
+            </div>
+            <div class="stage">
+                <div class="num">02</div>
+                <div><h4>Validate</h4><p class="what">Sixteen per-file and series-level checks covering identity, geometry, and pixel data.</p></div>
+                <p class="onfail">Structural failures — missing pixel data, inconsistent Rows/Columns, fewer than two usable slices — <b>block reconstruction</b>. Warnings do not.</p>
+            </div>
+            <div class="stage">
+                <div class="num">03</div>
+                <div><h4>Order the slices</h4><p class="what">Each slice's position is projected onto the slice normal derived from the image orientation cosines. Filenames are never used.</p></div>
+                <p class="onfail">Without usable geometry it falls back to <b>SliceLocation</b>, then <b>InstanceNumber</b>, and flags which was used.</p>
+            </div>
+            <div class="stage">
+                <div class="num">04</div>
+                <div><h4>Build the volume</h4><p class="what">Slices are stacked into a single <span class="val" style="color:#a8c4e8">[slice, row, column]</span> array at float32.</p></div>
+                <p class="onfail">Slices whose dimensions disagree with the majority are <b>excluded</b> and reported.</p>
+            </div>
+            <div class="stage">
+                <div class="num">05</div>
+                <div><h4>Convert to Hounsfield units</h4><p class="what">Rescale slope and intercept are read from each slice individually, never assumed constant across the series.</p></div>
+                <p class="onfail">A slice missing either value keeps its raw values and is marked <b>HU unavailable</b> rather than estimated.</p>
+            </div>
+            <div class="stage">
+                <div class="num">06</div>
+                <div><h4>Isolate the lung region</h4><p class="what">Body mask, HU thresholding, and 3D connected-component analysis — a rule-based method, not a trained model.</p></div>
+                <p class="onfail">If the result is not anatomically plausible the run <b>stops here</b>. See the thresholds below.</p>
+            </div>
+            <div class="stage">
+                <div class="num">07</div>
+                <div><h4>Reconstruct the surface</h4><p class="what">Marching cubes at true physical voxel spacing, producing vertices directly in patient-space millimetres.</p></div>
+                <p class="onfail">An empty or completely filled mask has no extractable surface and is <b>refused</b>.</p>
+            </div>
+            <div class="stage">
+                <div class="num">08</div>
+                <div><h4>Render</h4><p class="what">Surface mesh, direct volume rendering of the original voxel intensities, or both together.</p></div>
+                <p class="onfail">Interactive and high-fidelity are <b>separate representations</b>; the simplified one is never presented as the reference.</p>
+            </div>
+        </div>
+    </div>
+</section>
+<section class="band" style="border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Slice ordering</p>
+      <h2 class="headline">Filenames are never used.</h2>
+      <p class="lede">A DICOM series arrives as an unordered set of files. Sorting them by name is the most common way to get a reconstruction subtly, invisibly wrong &mdash; scanners do not guarantee that filename order matches anatomical order.</p>
+    </div>
+    <div class="tablewrap reveal d1">
+      <table class="dtable">
+        <thead><tr><th>Method</th><th>Used when</th><th>Reported as</th></tr></thead>
+        <tbody>
+          <tr><td>Slice-normal projection</td><td>ImageOrientationPatient and ImagePositionPatient are both present and well formed</td><td class="val">AVAILABLE</td></tr>
+          <tr><td>SliceLocation</td><td>Geometry is missing or malformed, but SliceLocation is present on every slice</td><td class="val">FALLBACK (SliceLocation)</td></tr>
+          <tr><td>InstanceNumber</td><td>Neither geometry nor SliceLocation is usable</td><td class="val">FALLBACK (InstanceNumber)</td></tr>
+          <tr><td>Upload order</td><td>No ordering metadata of any kind survives validation</td><td class="val">FALLBACK (upload_order)</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede reveal d2" style="margin-top:26px;">The preferred method takes the cross product of the row and column direction cosines to get the slice normal, then projects each slice's patient-space position onto it and sorts by that scalar. This is robust to reversed input order and to randomised filenames, because it uses only physical position.</p>
+    <p class="lede reveal d2">When a fallback is used it is flagged in the study summary and surfaced in the viewer, and left/right lung labelling is skipped entirely &mdash; without reliable orientation there is no defensible way to say which side is which.</p>
+  </div>
+</section>
+<section class="band" style="background:var(--bg-soft); border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Hounsfield conversion</p>
+      <h2 class="headline">Per slice, never assumed.</h2>
+    </div>
+    <p class="lede reveal d1" style="max-width:62ch;">Stored pixel values are scanner-specific integers. They become Hounsfield units through <span class="val">HU = value &times; RescaleSlope + RescaleIntercept</span>, and both terms are read from each slice's own dataset rather than sampled once from the first slice.</p>
+    <p class="lede reveal d1" style="max-width:62ch;">That distinction matters because a series can legitimately carry different rescale parameters per slice. Assuming they are constant produces a volume that looks correct and is quietly wrong in density &mdash; which would then propagate into every threshold decision the segmentation makes.</p>
+    <p class="lede reveal d2" style="max-width:62ch;">Where either value is absent, that slice keeps its raw stored values and is marked HU-unavailable. The study summary then reports conversion as <span class="val">AVAILABLE</span>, <span class="val">PARTIAL</span>, or <span class="val">NOT AVAILABLE</span>, and the viewer shows &ldquo;unavailable&rdquo; instead of a number when you inspect a voxel on such a slice.</p>
+  </div>
+</section>
+
+<section class="band" style="background: var(--bg-soft); border-top: 1px solid var(--line);">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">Validation</p>
+            <h2 class="headline">What gets checked before anything is built.</h2>
+        </div>
+        <ul class="checks reveal d1">
+            <li>File is readable as DICOM</li>
+            <li>Modality is CT</li>
+            <li>StudyInstanceUID is consistent</li>
+            <li>SeriesInstanceUID is consistent</li>
+            <li>No duplicate SOPInstanceUID</li>
+            <li>Slice count is greater than one</li>
+            <li>Rows and Columns are consistent</li>
+            <li>PixelSpacing is present</li>
+            <li>ImageOrientationPatient is present</li>
+            <li>ImagePositionPatient is present</li>
+            <li>SliceThickness is present</li>
+            <li>RescaleSlope / Intercept, per slice</li>
+            <li>PhotometricInterpretation is recognised</li>
+            <li>Pixel data is present and decodable</li>
+            <li>Transfer syntax is supported</li>
+            <li>Slice spacing is regular, without large gaps</li>
+        </ul>
+        <div class="outcomes reveal d2">
+            <span class="outcome pass"><b>PASS</b> &nbsp;check satisfied</span>
+            <span class="outcome warn"><b>WARNING</b> &nbsp;proceeds, surfaced to the user</span>
+            <span class="outcome fail"><b>FAIL</b> &nbsp;blocks reconstruction</span>
+            <span class="outcome na"><b>NOT AVAILABLE</b> &nbsp;data absent, never estimated</span>
+        </div>
+    </div>
+</section>
+
+<section class="band">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">Segmentation, stated plainly</p>
+            <h2 class="headline">It is not AI, and it says so.</h2>
+            <p class="lede">Lung extraction uses classical 3D image processing: external-air removal to isolate the body silhouette, Hounsfield thresholding to find air-density regions inside it, 26-connectivity component analysis, volume-based noise filtering, and hole filling. No trained model is involved, and the method is reported verbatim in every response.</p>
+        </div>
+
+        <div class="tablewrap reveal d1">
+            <table class="dtable">
+                <thead><tr><th>Parameter</th><th>Value</th><th>Purpose</th></tr></thead>
+                <tbody>
+                    <tr><td>External air threshold</td><td class="val">&le; &minus;900 HU</td><td>Identifies scanner background air connected to the volume border</td></tr>
+                    <tr><td>Lung candidate ceiling</td><td class="val">&le; &minus;300 HU</td><td>Air and parenchyma density inside the body silhouette</td></tr>
+                    <tr><td>Component noise floor</td><td class="val">5 mL</td><td>Discards bowel gas and imaging artifacts</td></tr>
+                    <tr><td>Plausibility floor</td><td class="val">200 mL</td><td>Below this the result is rejected as too small for lung</td></tr>
+                    <tr><td>Plausibility ceiling</td><td class="val">60% of body</td><td>Above this the mask has clearly captured non-lung structure</td></tr>
+                    <tr><td>Required HU coverage</td><td class="val">&ge; 90% of slices</td><td>Refuses to threshold uncalibrated pixel values</td></tr>
+                    <tr><td>Connectivity</td><td class="val">26-neighbour</td><td>Full 3D component analysis, not per-slice</td></tr>
+                    <tr><td>Left / right assignment</td><td class="val">DICOM LPS frame</td><td>Skipped entirely when orientation is unreliable</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="refuse reveal d2">
+            <h4>When it refuses rather than guesses</h4>
+            <ul>
+                <li>Calibrated Hounsfield units are available for fewer than 90% of slices.</li>
+                <li>No air-density voxels are found inside the body silhouette.</li>
+                <li>Body-silhouette isolation produces an empty mask.</li>
+                <li>The segmented volume falls below 200 mL, or exceeds 60% of the body silhouette.</li>
+                <li>No candidate region meets the minimum component volume.</li>
+            </ul>
+        </div>
+
+        <div style="margin-top:34px;" class="reveal d3">
+            <p class="eyebrow" style="margin-bottom:14px;">Quality metrics reported with every run</p>
+            <div class="taglist">
+                <code>lung_volume_ml</code><code>left_lung_volume_ml</code><code>right_lung_volume_ml</code>
+                <code>left_right_balance</code><code>body_volume_ml</code><code>lung_fraction_of_body</code>
+                <code>raw_component_count</code><code>kept_component_count</code>
+                <code>hu_availability_fraction</code><code>touches_inplane_border</code>
+                <code>touches_scan_range_start_or_end</code>
+            </div>
+        </div>
+    </div>
+</section>
+<section class="band" style="border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Left and right</p>
+      <h2 class="headline">The lungs are usually one connected region.</h2>
+      <p class="lede">On a real study the two lungs are almost never separate components. The trachea and main bronchi carry air at the same density as the lung fields, so a connectivity analysis joins them into a single region.</p>
+    </div>
+    <div class="stages reveal d1">
+      <div class="stage">
+        <div class="num">A</div>
+        <div><h4>Two comparable components</h4><p class="what">Treated as the two lungs directly, with the side assigned from the patient coordinate frame.</p></div>
+        <p class="onfail">Requires the runner-up to be at least <b>30%</b> of the largest &mdash; a much smaller region is something else, not a lung.</p>
+      </div>
+      <div class="stage">
+        <div class="num">B</div>
+        <div><h4>One merged component</h4><p class="what">Split at the sagittal midline, located as the narrowest point of the per-column profile &mdash; the mediastinum &mdash; rather than the mask centroid, which drifts when one lung is larger.</p></div>
+        <p class="onfail">The division near the midline is <b>approximate</b>, and the result says so.</p>
+      </div>
+      <div class="stage">
+        <div class="num">C</div>
+        <div><h4>Unreliable orientation</h4><p class="what">Left and right are not labelled at all.</p></div>
+        <p class="onfail">Guessing a side without a trustworthy patient frame would be <b>worse than declining</b>.</p>
+      </div>
+    </div>
+    <div class="refuse reveal d2" style="border-color:#1e3a5f; background:#101a2b;">
+      <h4 style="color:#93c5fd;">Measured on a real study</h4>
+      <ul>
+        <li>Before these rules: 197 mL and 6,012 mL &mdash; a balance of 0.03, with a gas bubble labelled as a whole lung.</li>
+        <li>After: 2,350 mL and 2,618 mL &mdash; a balance of 0.90, with the right lung slightly larger, as expected anatomically.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section class="band" style="background:var(--bg-soft); border-top:1px solid var(--line);">
+  <div class="wrap"><div class="next-links reveal">
+    <a class="next-card" href="/specifications"><div class="k">Next</div><div class="t">Specifications</div><p class="d">Parameters, coordinate spaces, and measured performance.</p></a>
+    <a class="next-card" href="/safety"><div class="k">Next</div><div class="t">Safety &amp; Limits</div><p class="d">What is deliberately not implemented, and what is not yet reliable.</p></a>
+  </div></div>
+</section>
+{% endblock %}

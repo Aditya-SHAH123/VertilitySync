@@ -1,0 +1,54 @@
+{
+  "_comment": [
+    "Reviewed, nonclinical prompt catalog for PUBLIC marketing/educational media only.",
+    "Every entry must be human-reviewed before use and must contain the safety phrases",
+    "'no text' and 'no patient identifiers' (enforced by higgsfield/guard.py).",
+    "These prompts describe SYNTHETIC, illustrative visualizations. Generated media is",
+    "never derived from a real study, never medical evidence, and is never shown inside",
+    "the clinical workspace.",
+    "Free-form prompts are refused at runtime - only ids listed here may be generated."
+  ],
+  "version": "1.0.0",
+  "prompts": [
+    {
+      "id": "hero_lung_rotation",
+      "section": "hero",
+      "media_type": "video",
+      "aspect_ratio": "16:9",
+      "review_status": "approved",
+      "prompt": "High-end scientific visualization of human lungs reconstructed from volumetric medical imaging, anatomically plausible proportions, detailed pulmonary surface and subtle internal bronchial structure, restrained partial translucency, controlled slow camera rotation, deep graphite background, sophisticated medical visualization lighting, premium medical technology presentation, no holograms, no glowing effects, no text, no labels, no patient identifiers, no logos, no diagnostic information."
+    },
+    {
+      "id": "ct_slices_to_volume",
+      "section": "from_image_to_anatomy",
+      "media_type": "video",
+      "aspect_ratio": "16:9",
+      "review_status": "approved",
+      "prompt": "Scientific medical visualization showing grayscale axial chest CT slices positioned sequentially in physical space, gradually forming a volumetric representation of the thorax and transitioning into an anatomically plausible three-dimensional lung reconstruction, precise controlled camera movement, dark neutral background, realistic CT-inspired imagery, premium medical technology presentation, no text, no patient identifiers, no diagnostic labels, no holograms."
+    },
+    {
+      "id": "clipping_cross_section",
+      "section": "interactive_3d",
+      "media_type": "video",
+      "aspect_ratio": "16:9",
+      "review_status": "approved",
+      "prompt": "Sophisticated scientific visualization of an anatomically plausible three-dimensional lung model being cut by a smooth moving cross-section plane, revealing internal structure with restrained studio lighting, graphite and white palette, slow deliberate camera movement, realistic medical visualization aesthetic, clean negative space, no text, no patient identifiers, no labels, no holographic effects, no fabricated measurements."
+    },
+    {
+      "id": "coordinate_link_visual",
+      "section": "connection",
+      "media_type": "image",
+      "aspect_ratio": "16:9",
+      "review_status": "approved",
+      "prompt": "Restrained scientific diagram-style visualization of a three-dimensional lung reconstruction spatially aligned above three grayscale orthogonal cross-sectional planes, conveying precise physical coordinate correspondence, deep graphite background, controlled lighting, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information."
+    },
+    {
+      "id": "section_background_texture",
+      "section": "high_fidelity",
+      "media_type": "image",
+      "aspect_ratio": "16:9",
+      "review_status": "approved",
+      "prompt": "Abstract dark graphite background texture suggesting fine volumetric medical imaging data density, extremely subtle tonal gradient, restrained and non-distracting, premium technology presentation backdrop, no anatomy, no text, no patient identifiers, no logos, no diagnostic information."
+    }
+  ]
+}

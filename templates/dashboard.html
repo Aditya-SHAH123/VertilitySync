@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VitalitySync - Dashboard</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 60px 20px; background-color: #f8fafc; color: #334155; }
+        .page { max-width: 780px; margin: 0 auto; }
+        .message-box { padding: 30px 40px; background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); text-align: center; margin-bottom: 24px; }
+        h2 { color: #f59e0b; margin-bottom: 16px; font-size: 1.4rem; }
+        .message-box p { margin: 0 0 12px 0; line-height: 1.5; font-size: 0.95rem; }
+        .back-link { display: inline-block; color: #3b82f6; text-decoration: none; font-weight: 500; margin-top: 8px; }
+        .back-link:hover { text-decoration: underline; color: #2563eb; }
+
+        .card { background: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); padding: 32px 40px; }
+        .card h3 { margin-top: 0; color: #1e293b; font-size: 1.3rem; }
+        .card > p.lede { color: #64748b; margin-top: -4px; margin-bottom: 24px; font-size: 0.95rem; line-height: 1.5; }
+
+        .dropzone {
+            border: 2px dashed #cbd5e1; border-radius: 10px; padding: 32px 20px; text-align: center;
+            cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; background: #f8fafc;
+        }
+        .dropzone.dragover { border-color: #3b82f6; background: #eff6ff; }
+        .dropzone p { margin: 0; color: #64748b; font-size: 0.95rem; }
+        .dropzone .browse { color: #3b82f6; font-weight: 600; text-decoration: underline; }
+        #fileInput { display: none; }
+
+        .file-summary { margin-top: 14px; font-size: 0.9rem; color: #334155; display: none; }
+        .file-summary.visible { display: block; }
+
+        .actions { margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; }
+        button.btn { border: none; border-radius: 6px; padding: 11px 22px; font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: background 0.2s ease; }
+        button.btn-primary { background: #3b82f6; color: #fff; }
+        button.btn-primary:hover:not(:disabled) { background: #2563eb; }
+        button.btn-primary:disabled { background: #93c5fd; cursor: not-allowed; }
+        button.btn-secondary { background: #e2e8f0; color: #334155; }
+        button.btn-secondary:hover:not(:disabled) { background: #cbd5e1; }
+        button.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+        a.btn-viewer { display: none; text-decoration: none; }
+        a.btn-viewer.visible { display: inline-block; }
+        .btn-viewer button { background: #16a34a; color: #fff; }
+        .btn-viewer button:hover { background: #15803d; }
+
+        .status-line { margin-top: 18px; font-size: 0.92rem; display: none; align-items: center; gap: 10px; }
+        .status-line.visible { display: flex; }
+        .spinner { width: 16px; height: 16px; border: 2px solid #cbd5e1; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.7s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .error-box { margin-top: 18px; padding: 14px 16px; background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 8px; font-size: 0.9rem; display: none; white-space: pre-wrap; }
+        .error-box.visible { display: block; }
+
+        .results { margin-top: 24px; display: none; }
+        .results.visible { display: block; }
+        .results h4 { margin-bottom: 8px; color: #1e293b; font-size: 1rem; }
+
+        .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.03em; }
+        .badge-PASS { background: #dcfce7; color: #166534; }
+        .badge-WARNING { background: #fef9c3; color: #854d0e; }
+        .badge-FAIL { background: #fee2e2; color: #991b1b; }
+
+        .file-list { max-height: 220px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 18px; }
+        .file-row { padding: 10px 14px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; }
+        .file-row:last-child { border-bottom: none; }
+        .file-row .fname { font-weight: 600; color: #334155; margin-right: 8px; }
+        .file-row ul { margin: 6px 0 0 0; padding-left: 18px; color: #64748b; }
+
+        .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 18px; }
+        .summary-item { background: #f8fafc; border-radius: 8px; padding: 12px 14px; }
+        .summary-item .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; margin-bottom: 4px; }
+        .summary-item .value { font-size: 0.95rem; color: #1e293b; font-weight: 600; }
+
+        .warnings-list { font-size: 0.85rem; color: #854d0e; background: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 12px 14px; margin-bottom: 4px; }
+        .warnings-list li { margin-bottom: 4px; }
+        .warnings-list li:last-child { margin-bottom: 0; }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <div class="message-box">
+        <h2>🚧 Features in Development 🚧</h2>
+        <p>The <strong>Athlete Nutrition Engine</strong> and <strong>Diagnostic Research Hub</strong> are currently being integrated by our development team. Please check back soon to interact with the LLM and custom dataset features.</p>
+        <a href="/" class="back-link">&larr; Return to Application Info</a>
+    </div>
+
+    <div class="card">
+        <h3>🫁 Chest CT Import</h3>
+        <p class="lede">Select a complete DICOM CT series to validate it, reconstruct a 3D volume, and open it in the multi-planar viewer. This is an imaging and research-education tool only — it does not diagnose disease, and no patient-identifying data ever leaves this browser.</p>
+
+        <div class="dropzone" id="dropzone">
+            <p>Drag and drop a DICOM series or a <strong>.zip archive</strong> here, or <span class="browse">browse files</span></p>
+            <p style="margin-top:8px;font-size:0.82rem;color:#94a3b8;">Public research collections (for example TCIA) download as a single .zip &mdash; you can import it directly. <a href="#" id="pickFolder" style="color:#3b82f6;">Select a folder instead</a>.</p>
+            <input type="file" id="fileInput" multiple accept=".dcm,.dicom,.zip,application/zip,application/dicom">
+            <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none;">
+        </div>
+        <div class="file-summary" id="fileSummary"></div>
+
+        <div class="actions">
+            <button class="btn btn-primary" id="processBtn" disabled>Process Series</button>
+            <button class="btn btn-secondary" id="clearBtn" disabled>Clear</button>
+            <a class="btn-viewer" id="viewerLink" href="#"><button class="btn" type="button">Open in Viewer &rarr;</button></a>
+        </div>
+
+        <div class="status-line" id="statusLine"><div class="spinner"></div><span id="statusText">Processing…</span></div>
+        <div class="error-box" id="errorBox"></div>
+
+        <div class="results" id="results">
+            <h4>Study Summary</h4>
+            <div class="summary-grid" id="summaryGrid"></div>
+
+            <div id="warningsWrap"></div>
+
+            <h4>Per-File Validation</h4>
+            <div class="file-list" id="fileList"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+(function () {
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('fileInput');
+    const fileSummary = document.getElementById('fileSummary');
+    const processBtn = document.getElementById('processBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const viewerLink = document.getElementById('viewerLink');
+    const statusLine = document.getElementById('statusLine');
+    const statusText = document.getElementById('statusText');
+    const errorBox = document.getElementById('errorBox');
+    const results = document.getElementById('results');
+    const summaryGrid = document.getElementById('summaryGrid');
+    const warningsWrap = document.getElementById('warningsWrap');
+    const fileList = document.getElementById('fileList');
+
+    let selectedFiles = [];
+    let currentStudyId = null;
+
+    function resetResults() {
+        results.classList.remove('visible');
+        errorBox.classList.remove('visible');
+        errorBox.textContent = '';
+        summaryGrid.innerHTML = '';
+        warningsWrap.innerHTML = '';
+        fileList.innerHTML = '';
+        viewerLink.classList.remove('visible');
+        currentStudyId = null;
+    }
+
+    function updateFileSummary() {
+        if (selectedFiles.length > 0) {
+            fileSummary.textContent = selectedFiles.length + ' file' + (selectedFiles.length === 1 ? '' : 's') + ' selected.';
+            fileSummary.classList.add('visible');
+            processBtn.disabled = false;
+            clearBtn.disabled = false;
+        } else {
+            fileSummary.classList.remove('visible');
+            processBtn.disabled = true;
+            clearBtn.disabled = true;
+        }
+    }
+
+    const folderInput = document.getElementById('folderInput');
+    const pickFolder = document.getElementById('pickFolder');
+    if (pickFolder) {
+        pickFolder.addEventListener('click', (e) => {
+            e.preventDefault(); e.stopPropagation();
+            folderInput.click();
+        });
+    }
+    folderInput.addEventListener('change', () => {
+        selectedFiles = Array.from(folderInput.files);
+        resetResults();
+        updateFileSummary();
+    });
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length) {
+            selectedFiles = Array.from(e.dataTransfer.files);
+            resetResults();
+            updateFileSummary();
+        }
+    });
+    fileInput.addEventListener('change', () => {
+        selectedFiles = Array.from(fileInput.files);
+        resetResults();
+        updateFileSummary();
+    });
+
+    clearBtn.addEventListener('click', async () => {
+        selectedFiles = [];
+        fileInput.value = '';
+        updateFileSummary();
+        resetResults();
+        if (currentStudyId) {
+            try { await fetch('/api/dicom/study/' + currentStudyId, { method: 'DELETE' }); } catch (e) { /* best effort */ }
+        }
+    });
+
+    function badge(status) {
+        return '<span class="badge badge-' + status + '">' + status + '</span>';
+    }
+
+    function renderSummary(summary) {
+        const items = [
+            ['Slices', summary.slice_count],
+            ['Rows × Columns', summary.rows + ' × ' + summary.columns],
+            ['Pixel Spacing (mm)', summary.pixel_spacing_mm ? summary.pixel_spacing_mm.map(v => v.toFixed(2)).join(' × ') : '—'],
+            ['Slice Spacing (mm)', summary.slice_spacing_mm !== null ? summary.slice_spacing_mm.toFixed(2) : 'N/A'],
+            ['Slice Thickness (mm)', summary.slice_thickness_mm !== null ? summary.slice_thickness_mm.toFixed(2) : 'NOT AVAILABLE'],
+            ['Orientation', summary.orientation_status],
+            ['HU Conversion', summary.hu_conversion_status],
+            ['Series Status', summary.series_status],
+        ];
+        summaryGrid.innerHTML = items.map(([label, value]) =>
+            '<div class="summary-item"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>'
+        ).join('');
+
+        if (summary.validation_warnings && summary.validation_warnings.length) {
+            warningsWrap.innerHTML = '<ul class="warnings-list">' +
+                summary.validation_warnings.map(w => '<li>' + w + '</li>').join('') + '</ul>';
+        } else {
+            warningsWrap.innerHTML = '';
+        }
+    }
+
+    function renderFileList(perFileResults) {
+        fileList.innerHTML = perFileResults.map(r =>
+            '<div class="file-row"><span class="fname">' + r.filename + '</span>' + badge(r.status) +
+            '<ul>' + r.messages.map(m => '<li>' + m + '</li>').join('') + '</ul></div>'
+        ).join('');
+    }
+
+    processBtn.addEventListener('click', async () => {
+        if (!selectedFiles.length) return;
+        resetResults();
+        statusLine.classList.add('visible');
+        statusText.textContent = 'Uploading and processing ' + selectedFiles.length + ' file(s)…';
+        processBtn.disabled = true;
+        clearBtn.disabled = true;
+
+        const formData = new FormData();
+        selectedFiles.forEach(f => formData.append('files', f, f.name));
+
+        try {
+            const resp = await fetch('/api/dicom/upload', { method: 'POST', body: formData });
+            const data = await resp.json();
+
+            if (!resp.ok) {
+                errorBox.textContent = (data.series_result && data.series_result.messages ? data.series_result.messages.join(' ') : null)
+                    || data.message || 'The series could not be processed.';
+                errorBox.classList.add('visible');
+                if (data.per_file_results) {
+                    results.classList.add('visible');
+                    renderFileList(data.per_file_results);
+                }
+                return;
+            }
+
+            currentStudyId = data.study_id;
+            if (data.archive_notes && data.archive_notes.length) {
+                warningsWrap.insertAdjacentHTML('beforebegin',
+                    '<ul class="warnings-list">' +
+                    data.archive_notes.map(n => '<li>' + n + '</li>').join('') + '</ul>');
+            }
+            renderSummary(data.summary);
+            renderFileList(data.per_file_results);
+            results.classList.add('visible');
+            viewerLink.href = '/viewer/' + currentStudyId;
+            viewerLink.classList.add('visible');
+        } catch (err) {
+            errorBox.textContent = 'Network or server error while processing the series: ' + err.message;
+            errorBox.classList.add('visible');
+        } finally {
+            statusLine.classList.remove('visible');
+            processBtn.disabled = false;
+            clearBtn.disabled = false;
+        }
+    });
+})();
+</script>
+</body>
+</html>

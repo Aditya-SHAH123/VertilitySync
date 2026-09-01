@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ case.case_ref }} — VitalitySync</title>
+    <style>
+        /* Clinical design system - matches cases.html. No marketing media. */
+        :root {
+            --bg: #0b0f16; --panel: #131923; --panel2: #171e2a; --line: #1f2836;
+            --text: #e6ebf2; --muted: #8b98ab; --dim: #64728a; --accent: #3b82f6;
+            --ok: #34d399; --warn: #fbbf24; --info: #60a5fa; --off: #64748b;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px;
+               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        a { color: inherit; text-decoration: none; }
+
+        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+                  padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
+        .brand { display: flex; align-items: center; gap: 9px; }
+        .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(140deg, #3b82f6, #1e40af); }
+        .brand .name { font-weight: 650; font-size: 0.9rem; }
+        .crumb { font-size: 0.82rem; color: var(--muted); }
+        .crumb a:hover { color: var(--text); }
+        .who { display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: var(--muted); }
+        .who a:hover { color: var(--text); }
+
+        .head { padding: 16px 22px; border-bottom: 1px solid var(--line); display: flex;
+                align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+        h1 { font-size: 1.1rem; margin: 0 0 5px; font-weight: 650; }
+        .ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--dim); }
+        .pill { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
+        .pill.needs_review { background: #422006; color: var(--warn); }
+        .pill.processing { background: #172554; color: var(--info); }
+        .pill.ready { background: #052e21; color: var(--ok); }
+        .pill.archived { background: #1e293b; color: var(--off); }
+        .demo-tag { font-size: 0.66rem; color: var(--dim); border: 1px solid var(--line);
+                    border-radius: 4px; padding: 1px 6px; margin-left: 7px; }
+
+        .btn { border: none; border-radius: 6px; padding: 7px 14px; font-size: 0.82rem; font-weight: 600;
+               cursor: pointer; font-family: inherit; display: inline-block; }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: #2563eb; }
+        .btn-sub { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
+        .btn-sub:hover { color: var(--text); }
+
+        .tabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--panel); }
+        .tabs button { background: none; border: none; color: var(--muted); font-family: inherit;
+                       font-size: 0.85rem; padding: 11px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
+        .tabs button:hover { color: var(--text); }
+        .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+
+        .pane { display: none; padding: 20px 22px 60px; }
+        .pane.on { display: block; }
+
+        .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+        .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+        .card .k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--dim); }
+        .card .v { font-size: 0.95rem; font-weight: 600; margin-top: 5px; }
+
+        .notice { background: #101a2b; border: 1px solid #1e3a5f; color: #93c5fd; border-radius: 7px;
+                  padding: 11px 14px; font-size: 0.82rem; line-height: 1.55; margin-bottom: 16px; }
+        .muted-box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+                     padding: 34px 20px; text-align: center; color: var(--muted); font-size: 0.87rem; }
+
+        textarea { width: 100%; min-height: 92px; background: var(--bg); border: 1px solid var(--line);
+                   color: var(--text); border-radius: 6px; padding: 10px 12px; font-size: 0.87rem;
+                   font-family: inherit; resize: vertical; }
+        textarea:focus { outline: none; border-color: var(--accent); }
+
+        .note { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+                padding: 13px 15px; margin-bottom: 10px; }
+        .note .meta { font-size: 0.72rem; color: var(--dim); margin-bottom: 7px; }
+        .note .body { font-size: 0.87rem; white-space: pre-wrap; line-height: 1.6; }
+
+        .status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+        select { background: var(--bg); border: 1px solid var(--line); color: var(--text);
+                 border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; font-family: inherit; }
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div class="brand"><span class="mark"></span><span class="name">VitalitySync</span></div>
+    <div class="crumb"><a href="/cases">Cases</a> &nbsp;/&nbsp; <span class="ref">{{ case.case_ref }}</span></div>
+    <div class="who"><span>{{ doctor_name }}</span><a href="/logout">Sign out</a></div>
+</div>
+
+<div class="head">
+    <div>
+        <h1>{{ case.title }}{% if case.is_demo %}<span class="demo-tag">DEMO RECORD</span>{% endif %}</h1>
+        <span class="ref">{{ case.case_ref }}</span>
+        &nbsp;<span class="pill {{ case.status }}">{{ case.status_label }}</span>
+    </div>
+    <div>
+        {% if case.study_id %}
+        <a class="btn btn-primary" href="/viewer/{{ case.study_id }}">Open Imaging &amp; 3D Viewer</a>
+        {% else %}
+        <a class="btn btn-sub" href="/dashboard">Import Imaging</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="tabs" id="tabs">
+    <button data-pane="overview" class="on">Overview</button>
+    <button data-pane="imaging">2D Imaging</button>
+    <button data-pane="recon">3D Reconstruction</button>
+    <button data-pane="measure">Measurements</button>
+    <button data-pane="notes">Notes</button>
+</div>
+
+<div class="pane on" data-pane="overview">
+    <div class="grid2">
+        <div class="card"><div class="k">Reference</div><div class="v">{{ case.case_ref }}</div></div>
+        <div class="card"><div class="k">Status</div><div class="v">{{ case.status_label }}</div></div>
+        <div class="card"><div class="k">Imaging Study</div><div class="v">{% if case.study_id %}Linked{% else %}Not linked{% endif %}</div></div>
+        <div class="card"><div class="k">Created</div><div class="v" id="createdAt">{{ case.created_at }}</div></div>
+        <div class="card"><div class="k">Last Updated</div><div class="v" id="updatedAt">{{ case.updated_at }}</div></div>
+    </div>
+
+    <div class="status-row">
+        <span style="font-size:0.78rem;color:var(--dim);">Change status</span>
+        <select id="statusSelect">
+            <option value="needs_review">Needs Review</option>
+            <option value="processing">Processing</option>
+            <option value="ready">Ready</option>
+            <option value="archived">Archived</option>
+        </select>
+        <button class="btn btn-sub" id="saveStatus">Save</button>
+        <span id="statusMsg" style="font-size:0.78rem;color:var(--dim);"></span>
+    </div>
+</div>
+
+<div class="pane" data-pane="imaging">
+    {% if case.study_id %}
+    <div class="notice">The axial, coronal, and sagittal views, windowing presets, and per-voxel Hounsfield readout are provided by the imaging viewer.</div>
+    <a class="btn btn-primary" href="/viewer/{{ case.study_id }}">Open 2D Imaging Viewer</a>
+    {% else %}
+    <div class="muted-box">
+        No imaging study is linked to this case yet.<br><br>
+        <a class="btn btn-primary" href="/dashboard">Import a DICOM CT series</a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="pane" data-pane="recon">
+    {% if case.study_id %}
+    <div class="notice">
+        3D reconstruction runs on this study's own CT voxels using a rule-based (non-AI) segmentation
+        pipeline. No disease classification or abnormality detection is performed. Reconstruction is
+        refused rather than approximated when segmentation fails plausibility checks.
+    </div>
+    <a class="btn btn-primary" href="/viewer/{{ case.study_id }}">Open 3D Reconstruction</a>
+    {% else %}
+    <div class="muted-box">3D reconstruction requires a linked imaging study.</div>
+    {% endif %}
+</div>
+
+<div class="pane" data-pane="measure">
+    {% if case.study_id %}
+    <div class="notice">Distance measurement uses physical patient-space coordinates derived from DICOM voxel spacing — never screen pixels.</div>
+    <a class="btn btn-primary" href="/viewer/{{ case.study_id }}">Measure in the 3D Viewer</a>
+    <div class="muted-box" style="margin-top:14px;">
+        Saved, persistent measurements are not yet implemented. Measurements taken in the viewer are
+        session-only and are not stored on this case.
+    </div>
+    {% else %}
+    <div class="muted-box">Measurements require a linked imaging study.</div>
+    {% endif %}
+</div>
+
+<div class="pane" data-pane="notes">
+    <div style="margin-bottom:16px;">
+        <textarea id="noteInput" placeholder="Add a note to this case…" maxlength="8000"></textarea>
+        <div style="margin-top:9px; display:flex; align-items:center; gap:10px;">
+            <button class="btn btn-primary" id="addNote">Add Note</button>
+            <span style="font-size:0.74rem;color:var(--dim);">Notes stay within this application and are never sent to any external service.</span>
+        </div>
+    </div>
+    <div id="notesList"></div>
+</div>
+
+<script>
+(function () {
+    const caseRef = {{ case.case_ref | tojson }};
+    const currentStatus = {{ case.status | tojson }};
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function fmt(iso) {
+        if (!iso) return '';
+        try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+    }
+
+    // tabs
+    document.querySelectorAll('#tabs button').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('#tabs button').forEach(function (x) { x.classList.remove('on'); });
+            document.querySelectorAll('.pane').forEach(function (p) { p.classList.remove('on'); });
+            b.classList.add('on');
+            document.querySelector('.pane[data-pane="' + b.getAttribute('data-pane') + '"]').classList.add('on');
+        });
+    });
+
+    // humanize timestamps rendered by the server
+    ['createdAt', 'updatedAt'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = fmt(el.textContent.trim());
+    });
+
+    // status
+    const statusSelect = document.getElementById('statusSelect');
+    statusSelect.value = currentStatus;
+    document.getElementById('saveStatus').addEventListener('click', async function () {
+        const msg = document.getElementById('statusMsg');
+        const resp = await fetch('/api/cases/' + encodeURIComponent(caseRef) + '/status', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: statusSelect.value }),
+        });
+        msg.textContent = resp.ok ? 'Saved.' : 'Could not save.';
+        setTimeout(function () { msg.textContent = ''; }, 2500);
+    });
+
+    // notes
+    const notesList = document.getElementById('notesList');
+    async function loadNotes() {
+        const resp = await fetch('/api/cases/' + encodeURIComponent(caseRef));
+        if (resp.status === 401) { window.location.href = '/login'; return; }
+        if (!resp.ok) return;
+        const data = await resp.json();
+        const notes = data.notes || [];
+        if (!notes.length) {
+            notesList.innerHTML = '<div class="muted-box">No notes on this case yet.</div>';
+            return;
+        }
+        notesList.innerHTML = notes.map(function (n) {
+            return '<div class="note"><div class="meta">' + esc(n.author_name || 'Unknown') +
+                ' · ' + esc(fmt(n.created_at)) + '</div>' +
+                '<div class="body">' + esc(n.content) + '</div></div>';
+        }).join('');
+    }
+
+    document.getElementById('addNote').addEventListener('click', async function () {
+        const input = document.getElementById('noteInput');
+        const content = input.value.trim();
+        if (!content) return;
+        const resp = await fetch('/api/cases/' + encodeURIComponent(caseRef) + '/notes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content }),
+        });
+        if (resp.ok) { input.value = ''; loadNotes(); }
+    });
+
+    loadNotes();
+})();
+</script>
+</body>
+</html>

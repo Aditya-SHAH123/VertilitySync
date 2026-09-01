@@ -1,0 +1,15 @@
+# Test-only dependencies. Deliberately NOT in the root requirements.txt so
+# they are not shipped to the Vercel serverless function.
+#
+# esprima: parses the JavaScript in the rendered templates so a syntax error
+# in the 3D viewer is caught without a browser (see test_frontend_syntax.py).
+esprima
+
+# moto: mocks AWS so test_asset_storage.py can verify the S3-compatible
+# backend's real request/response semantics with no network call and no
+# credentials (see api/asset_storage.py).
+moto[s3]
+
+# boto3 is required at import time by api/asset_storage.py's S3 backend
+# tests, even though it's only a lazy runtime import for the app itself.
+boto3

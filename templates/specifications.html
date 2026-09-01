@@ -1,0 +1,166 @@
+{% extends "public_base.html" %}
+{% set page = "specifications" %}
+{% block title %}VitalitySync Specifications{% endblock %}
+{% block description %}Parameters, coordinate spaces, quality modes, and measured performance on a real chest CT study.{% endblock %}
+{% block content %}
+<header class="page-head">
+    <div class="wrap">
+        <div class="crumbs"><a href="/">Overview</a><span>/</span><span>Specifications</span></div>
+        <h1 class="display" style="font-size:clamp(2.2rem,5vw,3.6rem);">The numbers<br>behind the picture.</h1>
+        <p class="lede">Geometry, spacing, and density are carried through from the source study rather than approximated for display. These are the parameters that govern that.</p>
+    </div>
+</header>
+
+<section class="band" style="background: var(--bg-soft); border-top: 1px solid var(--line);">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">Specification</p>
+            <h2 class="headline">The numbers behind the picture.</h2>
+        </div>
+        <div class="tablewrap reveal d1">
+            <table class="dtable">
+                <tbody>
+                    <tr><td>Input</td><td class="val">DICOM CT series</td><td>Multi-file upload; a photograph or exported JPEG cannot be used</td></tr>
+                    <tr><td>Internal volume</td><td class="val">[slice, row, column]</td><td>float32, in Hounsfield units where calibration allows</td></tr>
+                    <tr><td>Coordinate frame</td><td class="val">DICOM patient LPS</td><td>Millimetres; +X left, +Y posterior, +Z superior</td></tr>
+                    <tr><td>Lung window</td><td class="val">WW 1500 / WL &minus;600</td><td>Applied at render time; the volume is never modified</td></tr>
+                    <tr><td>Soft-tissue window</td><td class="val">WW 400 / WL 40</td><td></td></tr>
+                    <tr><td>Bone window</td><td class="val">WW 1800 / WL 400</td><td></td></tr>
+                    <tr><td>Interactive mesh</td><td class="val">&le; 160 voxels/axis</td><td>Downsampled for frame rate; labelled as such, never used as the reference</td></tr>
+                    <tr><td>High-fidelity mesh</td><td class="val">native resolution</td><td>No downsampling; the scientific reference representation</td></tr>
+                    <tr><td>Volume texture cap</td><td class="val">256 voxels/axis</td><td>Browser 3D-texture limit for direct volume rendering</td></tr>
+                    <tr><td>Clipping planes</td><td class="val">axial · coronal · sagittal</td><td>Interactive, client-side; no server round-trip, no mesh rebuild</td></tr>
+                    <tr><td>Measurement</td><td class="val">millimetres</td><td>Computed from patient-space coordinates, never screen pixels</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="band">
+    <div class="wrap">
+        <div class="band-head reveal">
+            <p class="eyebrow">High-fidelity imaging</p>
+            <h2 class="headline">Built from the imaging data.</h2>
+            <p class="lede">Geometry, spacing, and density are carried through from the source study rather than approximated for display.</p>
+        </div>
+
+        <div class="specs reveal d1">
+            <div class="spec">
+                <h4>DICOM geometry</h4>
+                <p>Slice order is derived from the image-orientation normal and patient position — never from filenames. Fallback ordering is flagged when geometry is unavailable.</p>
+            </div>
+            <div class="spec">
+                <h4>Physical voxel spacing</h4>
+                <p>Row, column, and slice spacing are read per study and honored during reconstruction, so proportions are not stretched or compressed.</p>
+            </div>
+            <div class="spec">
+                <h4>Hounsfield units</h4>
+                <p>Rescale slope and intercept are applied per slice, never assumed constant. When calibration is missing, HU is reported unavailable rather than estimated.</p>
+            </div>
+            <div class="spec">
+                <h4>Surface reconstruction</h4>
+                <p>A marching-cubes surface is generated at true physical spacing, with a separate interactive representation for responsiveness and a high-fidelity representation for inspection.</p>
+            </div>
+            <div class="spec">
+                <h4>Volumetric rendering</h4>
+                <p>The original voxel intensities can be rendered directly with adjustable window and opacity, for detail a surface alone cannot express.</p>
+            </div>
+            <div class="spec">
+                <h4>Synchronized coordinates</h4>
+                <p>A single documented transform maps volume indices to patient-space millimeters, keeping the 3D model and the 2D planes in agreement.</p>
+            </div>
+            <div class="spec">
+                <h4>Clipping &amp; measurement</h4>
+                <p>Axial, coronal, and sagittal cut planes move interactively. Distances are computed from physical coordinates, not screen pixels.</p>
+            </div>
+            <div class="spec">
+                <h4>Original CT inspection</h4>
+                <p>The source axial, coronal, and sagittal views remain available at all times, with windowing presets and per-voxel HU readout.</p>
+            </div>
+        </div>
+    </div>
+</section>
+<section class="band" style="border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Coordinate spaces</p>
+      <h2 class="headline">Four frames, one transform.</h2>
+      <p class="lede">Keeping the 3D model and the 2D planes in agreement is a matter of never letting these drift apart. A single affine transform is the only place the conversion is implemented.</p>
+    </div>
+    <div class="stages reveal d1">
+      <div class="stage">
+        <div class="num">01</div>
+        <div><h4>DICOM patient space (LPS)</h4><p class="what">Millimetres. +X toward the patient's left, +Y posterior, +Z superior. Comes from ImagePositionPatient and ImageOrientationPatient.</p></div>
+        <p class="onfail">The reference frame. Everything else is defined <b>relative to it</b>.</p>
+      </div>
+      <div class="stage">
+        <div class="num">02</div>
+        <div><h4>Volume index space</h4><p class="what">Integer <span class="val">(slice, row, column)</span> indices into the reconstructed array, in spatially sorted order.</p></div>
+        <p class="onfail">Converted by one documented function in <b>both directions</b>, so a round trip returns the original index.</p>
+      </div>
+      <div class="stage">
+        <div class="num">03</div>
+        <div><h4>Mesh space</h4><p class="what">There isn't one. Marching-cubes vertices are emitted directly in patient-space millimetres, so mesh coordinates <em>are</em> patient coordinates.</p></div>
+        <p class="onfail">Removing this frame removes a <b>class of drift bugs</b> entirely.</p>
+      </div>
+      <div class="stage">
+        <div class="num">04</div>
+        <div><h4>Viewer space</h4><p class="what">Scene units, where one unit is one millimetre. A fixed reversible remap orients the anatomy for display &mdash; applied identically to vertices, normals, clip planes, and click hits.</p></div>
+        <p class="onfail">Selecting a point on the model resolves to a CT voxel through the <b>same transform</b>, not an approximation.</p>
+      </div>
+    </div>
+  </div>
+</section>
+<section class="band" style="background:var(--bg-soft); border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Quality modes</p>
+      <h2 class="headline">Two representations, kept separate.</h2>
+      <p class="lede">Simplification for frame rate is legitimate. Presenting the simplified version as the reference is not.</p>
+    </div>
+    <div class="tablewrap reveal d1">
+      <table class="dtable">
+        <thead><tr><th></th><th>Interactive</th><th>High fidelity</th></tr></thead>
+        <tbody>
+          <tr><td>Mask resolution</td><td class="val">&le; 160 voxels/axis</td><td class="val">native</td></tr>
+          <tr><td>Downsampling</td><td>Integer factor, nearest neighbour</td><td>None</td></tr>
+          <tr><td>Intended use</td><td>Rotation, clipping, exploration</td><td>Inspection and measurement</td></tr>
+          <tr><td>Labelled in the UI</td><td>Yes, with the factor applied</td><td>Yes, as native resolution</td></tr>
+          <tr><td>Underlying mask</td><td colspan="2">Never modified by either mode &mdash; both derive from the same stored segmentation</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede reveal d2" style="margin-top:26px;">On the 255-slice study used for the imagery on this site, the high-fidelity surface came to <span class="val">1,050,969 vertices</span> and <span class="val">2,117,462 triangles</span>. The interactive mesh of the same segmentation is roughly an order of magnitude smaller.</p>
+  </div>
+</section>
+<section class="band" style="border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="band-head reveal">
+      <p class="eyebrow">Measured performance</p>
+      <h2 class="headline">On a real 255-slice study.</h2>
+      <p class="lede">Figures below are measured, not projected &mdash; taken from a public de-identified chest CT at 512 &times; 512, 0.65 mm in plane, 1.25 mm slice spacing.</p>
+    </div>
+    <div class="tablewrap reveal d1">
+      <table class="dtable">
+        <thead><tr><th>Stage</th><th>Time</th><th>Peak memory</th></tr></thead>
+        <tbody>
+          <tr><td>Validation, 255 files</td><td class="val">0.2 s</td><td class="val">&mdash;</td></tr>
+          <tr><td>Ordering</td><td class="val">&lt; 0.1 s</td><td class="val">&mdash;</td></tr>
+          <tr><td>Volume assembly + HU</td><td class="val">0.1 s</td><td class="val">651 MB</td></tr>
+          <tr><td>Lung segmentation</td><td class="val">3.9 s</td><td class="val">1,390 MB</td></tr>
+          <tr><td>High-fidelity surface</td><td class="val">2.4 s</td><td class="val">1,801 MB</td></tr>
+          <tr><td>Reconstructed volume</td><td class="val">267 MB</td><td class="val">float32</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="lede reveal d2" style="margin-top:26px;">Peak memory scales at roughly seven times the reconstructed volume size. Studies are held in a disk-backed store with the volume memory-mapped, so a slice request touches only the pages it needs and a small number of studies stay resident at once.</p>
+  </div>
+</section>
+<section class="band" style="background:var(--bg-soft); border-top:1px solid var(--line);">
+  <div class="wrap"><div class="next-links reveal">
+    <a class="next-card" href="/technology"><div class="k">Back</div><div class="t">Technology</div><p class="d">How a study becomes a reconstruction.</p></a>
+    <a class="next-card" href="/safety"><div class="k">Next</div><div class="t">Safety &amp; Limits</div><p class="d">What is deliberately not implemented.</p></a>
+  </div></div>
+</section>
+{% endblock %}

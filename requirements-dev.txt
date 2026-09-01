@@ -1,0 +1,12 @@
+# Development/ops-only dependencies - never shipped to the Vercel serverless
+# function, which only imports api/index.py and its runtime imports.
+#
+# alembic: runs migrations/ (see api/models.py, DATABASE_DESIGN.md). Invoked
+#   out-of-band ("alembic upgrade head"), never imported by api/index.py.
+alembic
+
+# boto3: only needed if ASSET_STORAGE_BACKEND=s3 is actually selected (see
+#   api/asset_storage.py). S3AssetStore imports it lazily so a deployment
+#   that only ever uses the local-disk backend does not need it installed.
+#   Install this file too when configuring the s3 backend for real use.
+boto3

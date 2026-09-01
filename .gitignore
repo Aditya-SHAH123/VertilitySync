@@ -1,0 +1,41 @@
+# Environment / secrets
+.env
+.env.*
+
+# DICOM uploads and generated volumes/meshes - never committed
+uploads/
+*.dcm
+*.dicom
+*.nii
+*.nii.gz
+*.stl
+*.obj
+*.ply
+meshes/
+volumes/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Vercel
+.vercel/
+
+# OS
+.DS_Store
+
+# Database (doctor accounts, cases, notes, audit log) - never committed
+*.db
+*.sqlite
+*.sqlite3
+
+# Generated marketing media (regenerate via marketing_media/generate.py)
+marketing_media/assets/*
+!marketing_media/assets/.gitkeep
+
+# Reconstructed study volumes and masks - contain pixel data, never committed
+instance/

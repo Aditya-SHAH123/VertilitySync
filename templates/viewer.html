@@ -1,0 +1,1960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VitalitySync - CT Viewer</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 24px 20px 60px; background-color: #0f172a; color: #e2e8f0; }
+        .page { max-width: 1280px; margin: 0 auto; }
+
+        header.top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+        header.top h1 { font-size: 1.3rem; margin: 0; color: #f1f5f9; }
+        header.top .sub { color: #94a3b8; font-size: 0.82rem; }
+        .top-actions { display: flex; gap: 10px; }
+        .top-actions a, .top-actions button { text-decoration: none; font-size: 0.85rem; font-weight: 600; border-radius: 6px; padding: 8px 14px; border: none; cursor: pointer; }
+        .top-actions a { background: #1e293b; color: #cbd5e1; }
+        .top-actions a:hover { background: #334155; }
+        .top-actions button { background: #b91c1c; color: #fff; }
+        .top-actions button:hover { background: #991b1b; }
+
+        .notice { background: #172033; border: 1px solid #1e3a5f; color: #93c5fd; border-radius: 8px; padding: 10px 14px; font-size: 0.82rem; margin-bottom: 18px; line-height: 1.5; }
+
+        #notFound { display: none; background: #1e293b; border-radius: 12px; padding: 40px; text-align: center; }
+        #notFound.visible { display: block; }
+        #notFound a { color: #3b82f6; }
+
+        #viewerRoot { display: none; }
+        #viewerRoot.visible { display: block; }
+
+        .controls-bar { background: #1e293b; border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 18px; align-items: center; }
+        .control-group { display: flex; align-items: center; gap: 8px; }
+        .control-group .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; margin-right: 4px; }
+        .preset-btn { background: #334155; color: #e2e8f0; border: none; border-radius: 6px; padding: 7px 12px; font-size: 0.82rem; cursor: pointer; }
+        .preset-btn:hover { background: #475569; }
+        .preset-btn.active { background: #3b82f6; color: #fff; }
+        .preset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .num-input { width: 68px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 5px; padding: 6px 8px; font-size: 0.82rem; }
+        .small-btn { background: #334155; color: #e2e8f0; border: none; border-radius: 6px; padding: 7px 12px; font-size: 0.82rem; cursor: pointer; }
+        .small-btn:hover { background: #475569; }
+        .small-btn.active { background: #16a34a; }
+        .small-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        input[type=range] { accent-color: #3b82f6; }
+
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+        .grid.single-panel { grid-template-columns: 1fr; }
+        .panel { background: #1e293b; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column; margin-bottom: 18px; }
+        .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 0.8rem; color: #cbd5e1; }
+        .panel-head .name { font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; font-size: 0.72rem; color: #93c5fd; }
+        .panel-head button { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 0.95rem; padding: 2px 6px; }
+        .panel-head button:hover { color: #e2e8f0; }
+
+        .viewport { position: relative; overflow: hidden; height: 320px; background: #000; display: flex; align-items: center; justify-content: center; cursor: crosshair; user-select: none; }
+        .grid.single-panel .viewport { height: 560px; }
+        .viewport-inner { position: relative; }
+        .slice-img { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+        .crosshair-v, .crosshair-h { position: absolute; background: rgba(59, 130, 246, 0.85); pointer-events: none; }
+        .crosshair-v { top: 0; bottom: 0; width: 1px; }
+        .crosshair-h { left: 0; right: 0; height: 1px; }
+        .no-data { color: #64748b; font-size: 0.8rem; }
+
+        .slider-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }
+        .slider-row input[type=range] { flex: 1; }
+        .slider-row .idx-label { font-size: 0.75rem; color: #94a3b8; min-width: 52px; text-align: right; }
+
+        .info-bar { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 24px; background: #1e293b; border-radius: 10px; padding: 14px 18px; }
+        .info-item .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; }
+        .info-item .value { font-size: 1rem; font-weight: 700; color: #f1f5f9; }
+
+        .future-controls { margin-top: 18px; background: #1e293b; border-radius: 10px; padding: 14px 18px; }
+        .future-controls .lbl { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; margin-bottom: 10px; display: block; }
+        .future-controls .row { display: flex; flex-wrap: wrap; gap: 10px; }
+        .future-btn { background: #1e293b; color: #64748b; border: 1px solid #334155; border-radius: 6px; padding: 7px 12px; font-size: 0.82rem; cursor: not-allowed; }
+        .future-btn[disabled] { opacity: 0.6; }
+
+        .summary-strip { display: flex; flex-wrap: wrap; gap: 22px; margin-bottom: 18px; }
+        .summary-strip .info-item .value { font-size: 0.9rem; }
+
+        /* ---- 3D workspace ---- */
+        .section-3d.hidden, .section-2d.hidden, .section-qa.hidden { display: none; }
+
+        /* ---- quantitative analysis ---- */
+        .qa-head { display: flex; align-items: center; justify-content: space-between;
+                   gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+        .qa-modes { display: flex; gap: 6px; }
+        .qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+        .qa-card { background: #1e293b; border: 1px solid #2b3a4e; border-radius: 9px; padding: 15px 17px; }
+        .qa-card h4 { margin: 0 0 12px; font-size: 0.76rem; text-transform: uppercase;
+                      letter-spacing: 0.09em; color: #93c5fd; font-weight: 700; }
+        .qa-metric { display: flex; justify-content: space-between; gap: 14px; padding: 6px 0;
+                     border-bottom: 1px solid #263447; font-size: 0.84rem; }
+        .qa-metric:last-child { border-bottom: none; }
+        .qa-metric .k { color: #94a3b8; }
+        .qa-metric .v { color: #f1f5f9; font-weight: 650; font-variant-numeric: tabular-nums;
+                        text-align: right; white-space: nowrap; }
+        .qa-metric .v.na { color: #64748b; font-weight: 500; font-size: 0.78rem; }
+
+        .qa-status { display: inline-block; padding: 2px 9px; border-radius: 100px;
+                     font-size: 0.68rem; font-weight: 700; letter-spacing: 0.04em; }
+        .qa-status.OK { background: #052e21; color: #34d399; }
+        .qa-status.WARNING { background: #422006; color: #fbbf24; }
+        .qa-status.FAILED { background: #3f1414; color: #f87171; }
+        .qa-status.NOT_AVAILABLE, .qa-status.NOT_EVALUATED { background: #1e293b; color: #64748b; }
+
+        .qa-unavailable { background: #141c28; border: 1px dashed #2b3a4e; border-radius: 9px;
+                          padding: 16px 18px; }
+        .qa-unavailable .t { font-size: 0.82rem; color: #cbd5e1; font-weight: 600; margin-bottom: 6px; }
+        .qa-unavailable .r { font-size: 0.8rem; color: #8b98ab; line-height: 1.6; }
+        .qa-unavailable .req { font-size: 0.74rem; color: #64748b; margin-top: 8px; }
+
+        .qa-section { margin-bottom: 22px; }
+        .qa-section > h3 { font-size: 0.95rem; margin: 0 0 11px; color: #e2e8f0; font-weight: 650; }
+
+        .qa-clickable { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+        .qa-clickable:hover { border-color: #3b82f6; background: #223047; }
+        .qa-hint { font-size: 0.72rem; color: #64748b; margin-top: 9px; }
+
+        table.qa-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        table.qa-table th { text-align: left; font-size: 0.66rem; text-transform: uppercase;
+                            letter-spacing: 0.08em; color: #64748b; font-weight: 600;
+                            padding: 0 10px 8px 0; border-bottom: 1px solid #2b3a4e; }
+        table.qa-table td { padding: 8px 10px 8px 0; border-bottom: 1px solid #263447; color: #cbd5e1;
+                            font-variant-numeric: tabular-nums; }
+        table.qa-table tr:last-child td { border-bottom: none; }
+        .qa-scroll { overflow-x: auto; }
+
+        .qa-chart { width: 100%; display: block; }
+        .qa-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.74rem; color: #94a3b8; margin-top: 8px; }
+        .qa-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+
+        .qa-bar-row { display: grid; grid-template-columns: 92px 1fr 74px; gap: 10px;
+                      align-items: center; padding: 5px 0; font-size: 0.82rem; }
+        .qa-bar-track { background: #0f172a; border-radius: 3px; height: 16px; overflow: hidden; }
+        .qa-bar-fill { height: 100%; background: linear-gradient(90deg, #2563eb, #60a5fa); }
+        .qa-bar-row .lbl2 { color: #94a3b8; }
+        .qa-bar-row .val2 { text-align: right; color: #f1f5f9; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+        .qa-provenance { font-size: 0.72rem; color: #64748b; line-height: 1.6; margin-top: 6px; }
+
+        .stepper { display: flex; flex-wrap: wrap; gap: 0; padding: 12px 16px; font-size: 0.75rem; color: #64748b; }
+        .stepper .step { padding: 5px 12px; border-radius: 999px; background: #0f172a; margin-right: 6px; margin-bottom: 6px; border: 1px solid #1e293b; }
+        .stepper .step.active { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+        .stepper .step.done { background: #14532d; color: #bbf7d0; border-color: #166534; }
+        .stepper .step.failed { background: #7f1d1d; color: #fecaca; border-color: #991b1b; }
+
+        .viewport3d { position: relative; width: 100%; height: 460px; background: #05070d; border-radius: 8px; overflow: hidden; cursor: grab; }
+        .viewport3d:active { cursor: grabbing; }
+        .viewport3d canvas { display: block; width: 100% !important; height: 100% !important; }
+
+        .error-box3d { margin: 0 16px 14px; padding: 12px 14px; background: #431414; border: 1px solid #7f1d1d; color: #fecaca; border-radius: 8px; font-size: 0.85rem; white-space: pre-wrap; }
+        .warn-box3d { margin: 0 16px 14px; padding: 10px 14px; background: #3f2d0a; border: 1px solid #78350f; color: #fde68a; border-radius: 8px; font-size: 0.8rem; }
+
+        .panel-body-pad { padding: 0 16px 16px; }
+    </style>
+</head>
+<body>
+<div class="page">
+
+    <header class="top">
+        <div>
+            <h1>Chest CT Viewer</h1>
+            <div class="sub">Imaging &amp; decision-support tool only — not a diagnosis. Study ID: {{ study_id }}</div>
+        </div>
+        <div class="top-actions">
+            <a href="/dashboard">&larr; Back to Dashboard</a>
+            <button id="clearStudyBtn">Clear Study</button>
+        </div>
+    </header>
+
+    <div id="notFound">
+        <p>This study wasn't found in memory. It may have expired, or the server process restarted.</p>
+        <p><a href="/dashboard">Return to the dashboard to re-import the DICOM series &rarr;</a></p>
+    </div>
+
+    <div id="viewerRoot">
+        <div class="notice">Research/visualization tool only — not a confirmed diagnosis. No disease classification, abnormality detection, or diagnostic AI is performed anywhere in this viewer. The 3D lung model is reconstructed directly from this study's own CT voxels using a rule-based (non-AI) image-processing pipeline — see the reconstruction panel for the exact method and quality metrics. Windowing/opacity/clipping only affect on-screen rendering; the underlying reconstructed volume is never modified.</div>
+
+        <div class="summary-strip" id="summaryStrip"></div>
+
+        <div class="controls-bar">
+            <div class="control-group">
+                <span class="lbl">Workspace</span>
+                <button class="preset-btn active" data-layout="dual">Dual 2D + 3D</button>
+                <button class="preset-btn" data-layout="3d">3D Only</button>
+                <button class="preset-btn" data-layout="2d">2D Only</button>
+                <button class="preset-btn" data-layout="analysis">Quantitative Analysis</button>
+            </div>
+        </div>
+
+        <!-- ================= 3D WORKSPACE ================= -->
+        <div class="panel section-3d" id="section3d">
+            <div class="panel-head"><span class="name">Interactive 3D Lung Reconstruction</span></div>
+
+            <div class="stepper" id="stepper3d">
+                <span class="step" data-step="segment">1. Preparing lung segmentation</span>
+                <span class="step" data-step="mesh">2. Creating 3D surface</span>
+                <span class="step" data-step="optimize">3. Optimizing visualization</span>
+                <span class="step" data-step="ready">4. 3D model ready</span>
+            </div>
+
+            <div class="panel-body-pad">
+                <div class="controls-bar" id="controlsPreSegment">
+                    <div class="control-group">
+                        <button class="small-btn" id="segmentBtn">Generate 3D Lung Model</button>
+                    </div>
+                </div>
+
+                <div class="controls-bar" id="controls3dPrimary" style="display:none;">
+                    <div class="control-group">
+                        <span class="lbl">Quality</span>
+                        <button class="preset-btn active" data-quality="interactive">Interactive</button>
+                        <button class="preset-btn" data-quality="high_fidelity">High Fidelity</button>
+                    </div>
+                    <div class="control-group">
+                        <span class="lbl">Part</span>
+                        <button class="preset-btn active" data-part="combined">Both Lungs</button>
+                        <button class="preset-btn" data-part="left" id="partLeftBtn">Left Only</button>
+                        <button class="preset-btn" data-part="right" id="partRightBtn">Right Only</button>
+                    </div>
+                    <div class="control-group">
+                        <span class="lbl">Render Mode</span>
+                        <button class="preset-btn active" data-mode="surface">3D Surface</button>
+                        <button class="preset-btn" data-mode="volume">3D CT Volume</button>
+                        <button class="preset-btn" data-mode="both">Surface + Volume</button>
+                    </div>
+                </div>
+
+                <div class="controls-bar" id="controls3dSecondary" style="display:none;">
+                    <div class="control-group">
+                        <span class="lbl">Opacity</span>
+                        <input type="range" id="opacitySlider" min="0" max="100" value="100" style="width:130px;">
+                        <span class="idx-label" id="opacityReadout">100%</span>
+                    </div>
+                    <div class="control-group">
+                        <span class="lbl">View</span>
+                        <button class="small-btn" data-view="anterior">Anterior</button>
+                        <button class="small-btn" data-view="posterior">Posterior</button>
+                        <button class="small-btn" data-view="left">Left</button>
+                        <button class="small-btn" data-view="right">Right</button>
+                        <button class="small-btn" data-view="superior">Superior</button>
+                        <button class="small-btn" data-view="inferior">Inferior</button>
+                        <button class="small-btn" id="reset3dBtn">Reset</button>
+                    </div>
+                    <div class="control-group">
+                        <button class="small-btn" id="measureBtn">Measure</button>
+                        <button class="small-btn" id="clearMeasureBtn">Clear Measurement</button>
+                        <button class="small-btn" id="screenshot3dBtn">Screenshot</button>
+                    </div>
+                </div>
+
+                <div class="controls-bar" id="clipControls" style="display:none;">
+                    <div class="control-group">
+                        <input type="checkbox" id="clipAxialToggle"><span class="lbl">Axial Clip</span>
+                        <input type="range" id="clipAxialSlider" min="0" max="100" value="100" style="width:120px;">
+                    </div>
+                    <div class="control-group">
+                        <input type="checkbox" id="clipCoronalToggle"><span class="lbl">Coronal Clip</span>
+                        <input type="range" id="clipCoronalSlider" min="0" max="100" value="100" style="width:120px;">
+                    </div>
+                    <div class="control-group">
+                        <input type="checkbox" id="clipSagittalToggle"><span class="lbl">Sagittal Clip</span>
+                        <input type="range" id="clipSagittalSlider" min="0" max="100" value="100" style="width:120px;">
+                    </div>
+                </div>
+
+                <div class="controls-bar" id="volumeControls" style="display:none;">
+                    <div class="control-group">
+                        <span class="lbl">Volume Window Preset</span>
+                        <button class="preset-btn active" data-vpreset="lung">Lung</button>
+                        <button class="preset-btn" data-vpreset="soft_tissue">Soft Tissue</button>
+                        <button class="preset-btn" data-vpreset="bone">Bone</button>
+                    </div>
+                    <div class="control-group">
+                        <span class="lbl">Volume Opacity</span>
+                        <input type="range" id="volumeOpacitySlider" min="0" max="100" value="45" style="width:120px;">
+                    </div>
+                </div>
+
+                <div class="error-box3d" id="error3d" style="display:none;"></div>
+                <div class="warn-box3d" id="warn3d" style="display:none;"></div>
+
+                <div id="viewport3dWrap" style="display:none;">
+                    <div class="viewport3d" id="viewport3d"></div>
+                </div>
+
+                <div class="info-bar" id="reconInfoBar" style="display:none;"></div>
+                <div class="info-bar" id="selectedPositionPanel" style="display:none;"></div>
+                <div class="info-bar" id="measureBar" style="display:none;">
+                    <div class="info-item"><div class="label">Measurement</div><div class="value" id="measureReadout">Click "Measure", then two points on the model.</div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ QUANTITATIVE ANALYSIS WORKSPACE ============ -->
+        <div class="panel section-qa hidden" id="sectionQa">
+            <div class="panel-head"><span class="name">Quantitative Imaging Analysis</span></div>
+            <div class="panel-body-pad">
+                <div class="notice">
+                    Structured measurements computed from this study's own voxel data and DICOM metadata.
+                    No machine-learning model contributes to any value here, and no disease
+                    classification or radiological finding is produced. Sections that require
+                    capabilities this application does not have are marked unavailable with the reason
+                    rather than filled with an estimate.
+                </div>
+
+                <div class="qa-head">
+                    <div class="qa-modes">
+                        <button class="preset-btn active" data-qa-mode="clinical">Clinical Summary</button>
+                        <button class="preset-btn" data-qa-mode="advanced">Advanced Analysis</button>
+                    </div>
+                    <div>
+                        <button class="small-btn" id="qaRunBtn">Run Analysis</button>
+                        <button class="small-btn" id="qaRefreshBtn" style="display:none;">Recompute</button>
+                    </div>
+                </div>
+
+                <div class="error-box3d" id="qaError" style="display:none;"></div>
+                <div id="qaBody"><div class="muted-box" style="color:#64748b;font-size:0.86rem;padding:34px;text-align:center;">
+                    Select <strong>Run Analysis</strong> to compute measurements for this study.
+                </div></div>
+            </div>
+        </div>
+
+        <!-- ================= 2D WORKSPACE ================= -->
+        <div class="section-2d" id="section2d">
+            <div class="controls-bar">
+                <div class="control-group">
+                    <span class="lbl">Window Preset</span>
+                    <button class="preset-btn" data-preset="lung">Lung</button>
+                    <button class="preset-btn" data-preset="soft_tissue">Soft Tissue</button>
+                    <button class="preset-btn" data-preset="bone">Bone</button>
+                </div>
+                <div class="control-group">
+                    <span class="lbl">WW</span>
+                    <input type="number" class="num-input" id="wwInput">
+                    <span class="lbl">WL</span>
+                    <input type="number" class="num-input" id="wlInput">
+                    <button class="small-btn" id="applyWindowBtn">Apply</button>
+                </div>
+                <div class="control-group">
+                    <button class="small-btn" id="resetViewBtn">Reset View</button>
+                </div>
+                <div class="control-group">
+                    <span class="lbl">Density Overlay</span>
+                    <button class="small-btn" id="overlayToggle">Off</button>
+                    <span class="idx-label" id="overlayStatus" style="min-width:auto;text-align:left;"></span>
+                </div>
+            </div>
+
+            <div id="overlayLegend" style="display:none; background:#1e293b; border-radius:10px;
+                 padding:12px 18px; margin-bottom:18px;">
+                <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;
+                     color:#94a3b8; margin-bottom:9px;">
+                    Density classification &mdash; Hounsfield range, not a radiological pattern
+                </div>
+                <div id="legendSwatches" style="display:flex; flex-wrap:wrap; gap:14px;"></div>
+                <div id="bandProfileWrap" style="margin-top:16px;"></div>
+                <div style="font-size:0.72rem; color:#64748b; margin-top:10px; line-height:1.55;">
+                    Colours encode measured density only. Naming honeycombing, reticulation or
+                    ground-glass requires a classifier trained and validated against expert
+                    annotation, which this application does not have.
+                </div>
+            </div>
+
+            <div class="grid" id="grid">
+                <div class="panel" data-plane="axial">
+                    <div class="panel-head"><span class="name">Axial</span><button data-max="axial" title="Maximize">&#9974;</button></div>
+                    <div class="viewport" data-plane="axial">
+                        <div class="viewport-inner">
+                            <img class="slice-img" draggable="false">
+                            <div class="crosshair-v"></div>
+                            <div class="crosshair-h"></div>
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <input type="range" min="0" max="0" value="0" data-plane="axial">
+                        <span class="idx-label" data-plane="axial">0 / 0</span>
+                    </div>
+                </div>
+
+                <div class="panel" data-plane="coronal">
+                    <div class="panel-head"><span class="name">Coronal</span><button data-max="coronal" title="Maximize">&#9974;</button></div>
+                    <div class="viewport" data-plane="coronal">
+                        <div class="viewport-inner">
+                            <img class="slice-img" draggable="false">
+                            <div class="crosshair-v"></div>
+                            <div class="crosshair-h"></div>
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <input type="range" min="0" max="0" value="0" data-plane="coronal">
+                        <span class="idx-label" data-plane="coronal">0 / 0</span>
+                    </div>
+                </div>
+
+                <div class="panel" data-plane="sagittal">
+                    <div class="panel-head"><span class="name">Sagittal</span><button data-max="sagittal" title="Maximize">&#9974;</button></div>
+                    <div class="viewport" data-plane="sagittal">
+                        <div class="viewport-inner">
+                            <img class="slice-img" draggable="false">
+                            <div class="crosshair-v"></div>
+                            <div class="crosshair-h"></div>
+                        </div>
+                    </div>
+                    <div class="slider-row">
+                        <input type="range" min="0" max="0" value="0" data-plane="sagittal">
+                        <span class="idx-label" data-plane="sagittal">0 / 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-bar">
+                <div class="info-item"><div class="label">X (voxel)</div><div class="value" id="voxelX">—</div></div>
+                <div class="info-item"><div class="label">Y (voxel)</div><div class="value" id="voxelY">—</div></div>
+                <div class="info-item"><div class="label">Z (voxel)</div><div class="value" id="voxelZ">—</div></div>
+                <div class="info-item"><div class="label">HU</div><div class="value" id="voxelHU">—</div></div>
+            </div>
+
+            <div class="future-controls">
+                <span class="lbl">Not yet implemented</span>
+                <div class="row">
+                    <button class="future-btn" disabled title="Not yet implemented">Fibrosis Region Overlay</button>
+                    <button class="future-btn" disabled title="Not yet implemented">Ground-Glass Overlay</button>
+                    <button class="future-btn" disabled title="Not yet implemented">Nodule Detection</button>
+                    <button class="future-btn" disabled title="Not yet implemented">Airway Tree</button>
+                    <button class="future-btn" disabled title="Not yet implemented">Vessel Tree</button>
+                    <button class="future-btn" disabled title="Not yet implemented">Abnormality Probability</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+(function () {
+    const studyId = {{ study_id | tojson }};
+
+    const notFoundEl = document.getElementById('notFound');
+    const viewerRoot = document.getElementById('viewerRoot');
+    const summaryStrip = document.getElementById('summaryStrip');
+    const grid = document.getElementById('grid');
+
+    let ww = 1500, wl = -600;
+    let vol = { cols: 0, rows: 0, slices: 0 };
+    let coord = { x: 0, y: 0, z: 0 };
+    let maximizedPlane = null;
+
+    const viewports = {
+        axial:    { indexKey: 'z', total: 0, naturalWidth: 0, naturalHeight: 0, aspect: 1, scale: 1, tx: 0, ty: 0 },
+        coronal:  { indexKey: 'y', total: 0, naturalWidth: 0, naturalHeight: 0, aspect: 1, scale: 1, tx: 0, ty: 0 },
+        sagittal: { indexKey: 'x', total: 0, naturalWidth: 0, naturalHeight: 0, aspect: 1, scale: 1, tx: 0, ty: 0 },
+    };
+
+    function el(plane, selector) {
+        return document.querySelector('.panel[data-plane="' + plane + '"] ' + selector);
+    }
+
+    function applyTransform(plane) {
+        const vp = viewports[plane];
+        const inner = el(plane, '.viewport-inner');
+        inner.style.transform = 'translate(' + vp.tx + 'px,' + vp.ty + 'px) scale(' + vp.scale + ')';
+    }
+
+    let overlayOn = false;
+
+    async function loadSlice(plane, index) {
+        const vp = viewports[plane];
+        const url = '/api/dicom/study/' + studyId + '/slice/' + plane + '/' + index
+                  + '?ww=' + ww + '&wl=' + wl + (overlayOn ? '&overlay=1' : '');
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!resp.ok) {
+            console.error(data.message || 'Failed to load slice');
+            return;
+        }
+        const img = el(plane, '.slice-img');
+        img.src = 'data:image/png;base64,' + data.image_base64;
+        await new Promise((resolve) => { img.onload = resolve; });
+
+        if (overlayOn && data.overlay && data.overlay !== 'OK') {
+            document.getElementById('overlayStatus').textContent = data.overlay;
+        }
+
+        vp.total = data.total;
+        vp.aspect = data.aspect_ratio;
+        vp.naturalWidth = img.naturalWidth;
+        vp.naturalHeight = img.naturalHeight;
+        coord[vp.indexKey] = data.index;
+
+        const inner = el(plane, '.viewport-inner');
+        const viewportEl = el(plane, '');
+        const boxH = viewportEl.clientHeight;
+        const scaleToFit = boxH / img.naturalHeight;
+        inner.style.width = (img.naturalWidth * scaleToFit) + 'px';
+        inner.style.height = (img.naturalHeight * scaleToFit) + 'px';
+
+        const slider = el(plane, 'input[type=range]');
+        slider.max = vp.total - 1;
+        slider.value = data.index;
+        el(plane, '.idx-label').textContent = (data.index + 1) + ' / ' + vp.total;
+
+        applyTransform(plane);
+        updateCrosshair(plane);
+    }
+
+    function updateCrosshair(plane) {
+        const vp = viewports[plane];
+        if (!vp.naturalWidth || !vp.naturalHeight) return;
+        let xFrac, yFrac;
+        if (plane === 'axial') {
+            xFrac = coord.x / vp.naturalWidth;
+            yFrac = coord.y / vp.naturalHeight;
+        } else if (plane === 'coronal') {
+            xFrac = coord.x / vp.naturalWidth;
+            yFrac = (coord.z * vp.aspect) / vp.naturalHeight;
+        } else {
+            xFrac = coord.y / vp.naturalWidth;
+            yFrac = (coord.z * vp.aspect) / vp.naturalHeight;
+        }
+        el(plane, '.crosshair-v').style.left = (xFrac * 100) + '%';
+        el(plane, '.crosshair-h').style.top = (yFrac * 100) + '%';
+    }
+
+    function updateAllCrosshairs() {
+        ['axial', 'coronal', 'sagittal'].forEach(updateCrosshair);
+    }
+
+    async function fetchVoxel() {
+        const url = '/api/dicom/study/' + studyId + '/voxel?x=' + coord.x + '&y=' + coord.y + '&z=' + coord.z;
+        const resp = await fetch(url);
+        const data = await resp.json();
+        if (!resp.ok) return;
+        document.getElementById('voxelX').textContent = data.x;
+        document.getElementById('voxelY').textContent = data.y;
+        document.getElementById('voxelZ').textContent = data.z;
+        document.getElementById('voxelHU').textContent = data.hu_available ? Math.round(data.hu) : 'unavailable';
+    }
+
+    // --- click => set crosshair + move the OTHER two planes' slice index ---
+    function onViewportClick(plane, naturalX, naturalY) {
+        const vp = viewports[plane];
+        if (plane === 'axial') {
+            coord.x = clamp(naturalX, 0, vp.naturalWidth - 1);
+            coord.y = clamp(naturalY, 0, vp.naturalHeight - 1);
+            loadSlice('coronal', coord.y);
+            loadSlice('sagittal', coord.x);
+        } else if (plane === 'coronal') {
+            coord.x = clamp(naturalX, 0, vp.naturalWidth - 1);
+            coord.z = clamp(Math.round(naturalY / vp.aspect), 0, vol.slices - 1);
+            loadSlice('axial', coord.z);
+            loadSlice('sagittal', coord.x);
+        } else {
+            coord.y = clamp(naturalX, 0, vp.naturalWidth - 1);
+            coord.z = clamp(Math.round(naturalY / vp.aspect), 0, vol.slices - 1);
+            loadSlice('axial', coord.z);
+            loadSlice('coronal', coord.y);
+        }
+        updateAllCrosshairs();
+        fetchVoxel();
+    }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    // --- interaction wiring per viewport: click-to-crosshair, drag-to-pan, wheel-to-zoom ---
+    function wireViewport(plane) {
+        const viewportEl = el(plane, '');
+        const inner = el(plane, '.viewport-inner');
+        let dragging = false, moved = false, startX = 0, startY = 0, startTx = 0, startTy = 0;
+
+        viewportEl.addEventListener('mousedown', (e) => {
+            dragging = true; moved = false;
+            startX = e.clientX; startY = e.clientY;
+            startTx = viewports[plane].tx; startTy = viewports[plane].ty;
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (!dragging) return;
+            const dx = e.clientX - startX, dy = e.clientY - startY;
+            if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+            if (moved) {
+                viewports[plane].tx = startTx + dx;
+                viewports[plane].ty = startTy + dy;
+                applyTransform(plane);
+            }
+        });
+        window.addEventListener('mouseup', (e) => {
+            if (!dragging) return;
+            dragging = false;
+            if (!moved) {
+                const rect = inner.getBoundingClientRect();
+                const ratioX = (e.clientX - rect.left) / rect.width;
+                const ratioY = (e.clientY - rect.top) / rect.height;
+                if (ratioX >= 0 && ratioX <= 1 && ratioY >= 0 && ratioY <= 1) {
+                    const vp = viewports[plane];
+                    const nx = Math.floor(ratioX * vp.naturalWidth);
+                    const ny = Math.floor(ratioY * vp.naturalHeight);
+                    onViewportClick(plane, nx, ny);
+                }
+            }
+        });
+        viewportEl.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const vp = viewports[plane];
+            const delta = e.deltaY < 0 ? 1.1 : (1 / 1.1);
+            vp.scale = clamp(vp.scale * delta, 0.5, 6);
+            applyTransform(plane);
+        }, { passive: false });
+
+        const slider = el(plane, 'input[type=range]');
+        slider.addEventListener('input', () => {
+            const idx = parseInt(slider.value, 10);
+            loadSlice(plane, idx).then(() => { updateAllCrosshairs(); fetchVoxel(); });
+        });
+        slider.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const dir = e.deltaY > 0 ? 1 : -1;
+            const newVal = clamp(parseInt(slider.value, 10) + dir, 0, parseInt(slider.max, 10));
+            slider.value = newVal;
+            slider.dispatchEvent(new Event('input'));
+        }, { passive: false });
+    }
+
+    // --- maximize ---
+    function setMaximized(plane) {
+        maximizedPlane = (maximizedPlane === plane) ? null : plane;
+        document.querySelectorAll('.panel[data-plane]').forEach((p) => {
+            const pn = p.getAttribute('data-plane');
+            p.style.display = (!maximizedPlane || pn === maximizedPlane) ? '' : 'none';
+        });
+        grid.classList.toggle('single-panel', !!maximizedPlane);
+    }
+    document.querySelectorAll('[data-max]').forEach((btn) => {
+        btn.addEventListener('click', () => setMaximized(btn.getAttribute('data-max')));
+    });
+
+    // --- windowing controls ---
+    const presetButtons = document.querySelectorAll('[data-preset]');
+    function setActivePresetButton(name) {
+        presetButtons.forEach((b) => b.classList.toggle('active', b.getAttribute('data-preset') === name));
+    }
+    presetButtons.forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const preset = btn.getAttribute('data-preset');
+            const presets = { lung: [1500, -600], soft_tissue: [400, 40], bone: [1800, 400] };
+            ww = presets[preset][0]; wl = presets[preset][1];
+            document.getElementById('wwInput').value = ww;
+            document.getElementById('wlInput').value = wl;
+            setActivePresetButton(preset);
+            await refreshAllSlices();
+        });
+    });
+    document.getElementById('applyWindowBtn').addEventListener('click', async () => {
+        ww = parseFloat(document.getElementById('wwInput').value) || ww;
+        wl = parseFloat(document.getElementById('wlInput').value) || wl;
+        setActivePresetButton(null);
+        await refreshAllSlices();
+    });
+
+    async function refreshAllSlices() {
+        await Promise.all([
+            loadSlice('axial', coord.z),
+            loadSlice('coronal', coord.y),
+            loadSlice('sagittal', coord.x),
+        ]);
+        updateAllCrosshairs();
+        fetchVoxel();
+    }
+
+    document.getElementById('resetViewBtn').addEventListener('click', () => {
+        ['axial', 'coronal', 'sagittal'].forEach((plane) => {
+            viewports[plane].scale = 1; viewports[plane].tx = 0; viewports[plane].ty = 0;
+            applyTransform(plane);
+        });
+    });
+
+    document.getElementById('clearStudyBtn').addEventListener('click', async () => {
+        if (!confirm('Clear this study from memory? You will need to re-import it to view it again.')) return;
+        await fetch('/api/dicom/study/' + studyId, { method: 'DELETE' });
+        window.location.href = '/dashboard';
+    });
+
+    function renderSummaryStrip(summary) {
+        const items = [
+            ['Slices', summary.slice_count],
+            ['Rows × Columns', summary.rows + ' × ' + summary.columns],
+            ['Pixel Spacing (mm)', summary.pixel_spacing_mm.map(v => v.toFixed(2)).join(' × ')],
+            ['HU Conversion', summary.hu_conversion_status],
+            ['Orientation', summary.orientation_status],
+        ];
+        summaryStrip.innerHTML = items.map(([label, value]) =>
+            '<div class="info-item"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>'
+        ).join('');
+    }
+
+    // --- workspace layout toggle (2D / 3D / Dual / Analysis) ---
+    const section2d = document.getElementById('section2d');
+    const section3d = document.getElementById('section3d');
+    const sectionQa = document.getElementById('sectionQa');
+    document.querySelectorAll('[data-layout]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('[data-layout]').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const mode = btn.getAttribute('data-layout');
+            const qa = mode === 'analysis';
+            section2d.classList.toggle('hidden', mode === '3d' || qa);
+            section3d.classList.toggle('hidden', mode === '2d' || qa);
+            sectionQa.classList.toggle('hidden', !qa);
+            window.dispatchEvent(new Event('resize'));
+        });
+    });
+
+    async function init() {
+        const resp = await fetch('/api/dicom/study/' + studyId + '/summary');
+        if (!resp.ok) {
+            notFoundEl.classList.add('visible');
+            return;
+        }
+        const data = await resp.json();
+        const summary = data.summary;
+        renderSummaryStrip(summary);
+
+        vol.cols = summary.columns; vol.rows = summary.rows; vol.slices = summary.slice_count;
+        coord = { x: Math.floor(vol.cols / 2), y: Math.floor(vol.rows / 2), z: Math.floor(vol.slices / 2) };
+
+        document.getElementById('wwInput').value = ww;
+        document.getElementById('wlInput').value = wl;
+        setActivePresetButton('lung');
+
+        ['axial', 'coronal', 'sagittal'].forEach(wireViewport);
+
+        viewerRoot.classList.add('visible');
+        await refreshAllSlices();
+    }
+
+    // ===================================================================
+    // DENSITY OVERLAY + DISTRIBUTION PROFILE
+    // ===================================================================
+    // The overlay is rendered server-side from the HU volume and the lung
+    // mask; this code only toggles it and draws the legend and profile from
+    // values the backend computed.
+    (function densityOverlay() {
+        const btn = document.getElementById('overlayToggle');
+        const status = document.getElementById('overlayStatus');
+        const legend = document.getElementById('overlayLegend');
+        const swatches = document.getElementById('legendSwatches');
+        const profileWrap = document.getElementById('bandProfileWrap');
+        let profile = null;
+
+        function drawLegend(bands) {
+            swatches.innerHTML = bands.map(b =>
+                '<span style="display:flex;align-items:center;gap:7px;font-size:0.78rem;color:#cbd5e1;">' +
+                '<i style="width:14px;height:14px;border-radius:3px;display:inline-block;background:rgb(' +
+                b.color.join(',') + ');"></i>' + b.label + '</span>').join('');
+        }
+
+        // stacked area: how the density composition changes from the base of
+        // the lung to the apex
+        function drawProfile(p) {
+            const slices = p.slices;
+            if (!slices.length) { profileWrap.innerHTML = ''; return; }
+            const bands = p.bands;
+            const W = 860, H = 190, padL = 40, padB = 30, padT = 10, padR = 10;
+            const n = slices.length;
+            const x = i => padL + (i / Math.max(n - 1, 1)) * (W - padL - padR);
+            const y = v => H - padB - (v / 100) * (H - padB - padT);
+
+            let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;display:block;" ' +
+                'role="img" aria-label="Density band composition from lung base to apex">';
+            for (let g = 0; g <= 4; g++) {
+                const yy = padT + g * (H - padB - padT) / 4;
+                svg += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy +
+                       '" stroke="#243044" stroke-width="1"/>' +
+                       '<text x="' + (padL - 6) + '" y="' + (yy + 3) + '" fill="#64748b" font-size="9" ' +
+                       'text-anchor="end">' + (100 - g * 25) + '%</text>';
+            }
+            // cumulative stacking, low density at the bottom
+            const cum = new Array(n).fill(0);
+            bands.forEach(b => {
+                let top = '', bottom = '';
+                for (let i = 0; i < n; i++) {
+                    const v0 = cum[i];
+                    const v1 = v0 + (slices[i].bands[b.key] || 0);
+                    top += (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + y(v1).toFixed(1) + ' ';
+                    cum[i] = v1;
+                }
+                for (let i = n - 1; i >= 0; i--) {
+                    const v0 = cum[i] - (slices[i].bands[b.key] || 0);
+                    bottom += 'L' + x(i).toFixed(1) + ' ' + y(v0).toFixed(1) + ' ';
+                }
+                svg += '<path d="' + top + bottom + 'Z" fill="rgb(' + b.color.join(',') +
+                       ')" fill-opacity="0.75"/>';
+            });
+            svg += '<text x="' + padL + '" y="' + (H - 8) + '" fill="#64748b" font-size="10">base (inferior)</text>' +
+                   '<text x="' + (W - padR) + '" y="' + (H - 8) + '" fill="#64748b" font-size="10" ' +
+                   'text-anchor="end">apex (superior)</text></svg>';
+
+            profileWrap.innerHTML =
+                '<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;' +
+                'color:#94a3b8;margin-bottom:7px;">Composition from lung base to apex &mdash; ' +
+                slices.length + ' slices</div>' + svg;
+        }
+
+        async function loadProfile() {
+            const r = await fetch('/api/dicom/study/' + studyId + '/band-profile');
+            const d = await r.json();
+            if (!r.ok) { status.textContent = d.reason || 'Profile unavailable.'; return null; }
+            return d.profile;
+        }
+
+        btn.addEventListener('click', async () => {
+            overlayOn = !overlayOn;
+            btn.textContent = overlayOn ? 'On' : 'Off';
+            btn.classList.toggle('active', overlayOn);
+            legend.style.display = overlayOn ? 'block' : 'none';
+            status.textContent = '';
+
+            if (overlayOn && !profile) {
+                status.textContent = 'Computing…';
+                profile = await loadProfile();
+                if (profile) {
+                    drawLegend(profile.bands);
+                    drawProfile(profile);
+                    status.textContent = '';
+                }
+            }
+            await refreshAllSlices();
+        });
+    })();
+
+    // ===================================================================
+    // QUANTITATIVE ANALYSIS PANEL
+    // ===================================================================
+    // Presentation only. Every number rendered here is computed on the
+    // backend from the source volume; this code performs no medical
+    // arithmetic of its own beyond formatting and drawing.
+    (function quantitativeAnalysis() {
+        const runBtn = document.getElementById('qaRunBtn');
+        const refreshBtn = document.getElementById('qaRefreshBtn');
+        const bodyEl = document.getElementById('qaBody');
+        const errEl = document.getElementById('qaError');
+        let analysis = null;
+        let mode = 'clinical';
+
+        const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
+            c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const num = (v, unit) => (v === null || v === undefined)
+            ? '<span class="v na">NOT AVAILABLE</span>'
+            : '<span class="v">' + esc(v) + (unit ? ' ' + unit : '') + '</span>';
+
+        function metric(label, value, unit) {
+            return '<div class="qa-metric"><span class="k">' + esc(label) + '</span>' + num(value, unit) + '</div>';
+        }
+        function statusPill(s) {
+            return '<span class="qa-status ' + esc(s) + '">' + esc(String(s).replace('_', ' ')) + '</span>';
+        }
+        function unavailable(title, block) {
+            return '<div class="qa-unavailable"><div class="t">' + esc(title) + ' &mdash; ' +
+                statusPill(block.status || 'NOT_AVAILABLE') + '</div>' +
+                '<div class="r">' + esc(block.reason || '') + '</div>' +
+                (block.requires ? '<div class="req">Requires: ' + esc(block.requires) + '</div>' : '') +
+                '</div>';
+        }
+
+        // ---- density histogram, drawn from backend-computed counts ----
+        function histogramSVG(regions) {
+            const series = [];
+            const colors = { whole_lungs: '#60a5fa', left_lung: '#f0a882', right_lung: '#7ec9a1' };
+            for (const key of ['whole_lungs', 'left_lung', 'right_lung']) {
+                const h = regions[key];
+                if (h && h.status === 'OK') series.push({ key, h });
+            }
+            if (!series.length) return '<div class="qa-unavailable"><div class="r">No histogram data.</div></div>';
+
+            const W = 720, H = 210, padL = 44, padB = 26, padT = 8, padR = 8;
+            const edges = series[0].h.bin_edges_hu;
+            const nb = series[0].h.counts.length;
+            let maxCount = 0;
+            series.forEach(s => s.h.counts.forEach(c => { if (c > maxCount) maxCount = c; }));
+            if (maxCount <= 0) maxCount = 1;
+
+            const x = i => padL + (i / nb) * (W - padL - padR);
+            const y = c => H - padB - (c / maxCount) * (H - padB - padT);
+
+            let svg = '<svg class="qa-chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" ' +
+                'aria-label="Lung density histogram in Hounsfield units">';
+            // gridlines + HU axis
+            for (let g = 0; g <= 4; g++) {
+                const yy = padT + g * (H - padB - padT) / 4;
+                svg += '<line x1="' + padL + '" y1="' + yy + '" x2="' + (W - padR) + '" y2="' + yy +
+                       '" stroke="#243044" stroke-width="1"/>';
+            }
+            for (let t = 0; t <= 4; t++) {
+                const hu = edges[0] + t * (edges[edges.length - 1] - edges[0]) / 4;
+                const xx = padL + t * (W - padL - padR) / 4;
+                svg += '<text x="' + xx + '" y="' + (H - 8) + '" fill="#64748b" font-size="10" ' +
+                       'text-anchor="middle">' + Math.round(hu) + '</text>';
+            }
+            svg += '<text x="10" y="' + (padT + 10) + '" fill="#64748b" font-size="10">voxels</text>';
+            series.forEach(s => {
+                let d = '';
+                s.h.counts.forEach((c, i) => { d += (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ' ' + y(c).toFixed(1) + ' '; });
+                svg += '<path d="' + d + '" fill="none" stroke="' + colors[s.key] + '" stroke-width="1.6"/>';
+            });
+            svg += '<text x="' + (W / 2) + '" y="' + (H - 8) + '" fill="#475569" font-size="10" ' +
+                   'text-anchor="middle" transform="translate(0,0)"></text></svg>';
+
+            let legend = '<div class="qa-legend">';
+            series.forEach(s => {
+                legend += '<span><i style="background:' + colors[s.key] + '"></i>' +
+                    esc(s.key.replace(/_/g, ' ')) + '</span>';
+            });
+            legend += '<span style="color:#475569;">Hounsfield units &middot; bin width ' +
+                esc(series[0].h.bin_width_hu) + ' HU</span></div>';
+            return svg + legend;
+        }
+
+        function barRow(label, pct, value) {
+            const w = Math.max(0, Math.min(100, pct || 0));
+            return '<div class="qa-bar-row"><span class="lbl2">' + esc(label) + '</span>' +
+                '<span class="qa-bar-track"><span class="qa-bar-fill" style="width:' + w.toFixed(1) + '%"></span></span>' +
+                '<span class="val2">' + esc(value) + '</span></div>';
+        }
+
+        function renderClinical(a) {
+            let h = '';
+            const sq = a.scan_quality;
+            h += '<div class="qa-section"><h3>Scan quality ' + statusPill(sq.status) + '</h3>' +
+                 '<div class="qa-grid"><div class="qa-card">' +
+                 metric('Suitable for quantitative analysis', sq.suitable_for_quantitative_analysis ? 'Yes' : 'No') +
+                 sq.checks.filter(c => c.status === 'WARNING' || c.status === 'FAILED')
+                     .map(c => metric(c.name, String(c.status).replace('_', ' '))).join('') +
+                 '</div></div>' +
+                 (sq.warnings.length ? '<p class="qa-hint">' + sq.warnings.map(esc).join(' &middot; ') + '</p>' : '') +
+                 '<p class="qa-provenance">' + esc(sq.note) + '</p></div>';
+
+            const lm = a.lung_metrics;
+            if (lm.status !== 'OK') { h += '<div class="qa-section">' + unavailable('Lung volumes', lm) + '</div>'; }
+            else {
+                h += '<div class="qa-section"><h3>Lung volumes</h3><div class="qa-grid">' +
+                    '<div class="qa-card qa-clickable" data-focus="whole"><h4>Both lungs</h4>' +
+                    metric('Total volume', lm.total_lung_volume_ml, 'mL') +
+                    metric('Voxels', lm.voxel_count) + '</div>' +
+                    '<div class="qa-card qa-clickable" data-focus="left"><h4>Left lung</h4>' +
+                    metric('Volume', lm.left_lung_volume_ml, 'mL') +
+                    metric('Share of total', lm.left_fraction != null ? (lm.left_fraction * 100).toFixed(1) : null, '%') + '</div>' +
+                    '<div class="qa-card qa-clickable" data-focus="right"><h4>Right lung</h4>' +
+                    metric('Volume', lm.right_lung_volume_ml, 'mL') +
+                    metric('Share of total', lm.right_fraction != null ? (lm.right_fraction * 100).toFixed(1) : null, '%') + '</div>' +
+                    '</div><p class="qa-hint">Volume = voxel count &times; physical voxel volume. ' +
+                    'Select a card to show that side in the 3D view.</p></div>';
+            }
+
+            const dm = a.density_metrics;
+            if (dm.status === 'OK') {
+                const w = dm.whole_lungs;
+                h += '<div class="qa-section"><h3>Lung density</h3><div class="qa-grid"><div class="qa-card">' +
+                    '<h4>Whole lungs</h4>' + metric('Mean', w.mean_hu, 'HU') + metric('Median', w.median_hu, 'HU') +
+                    metric('Std deviation', w.std_hu, 'HU') +
+                    metric('5th percentile', w.percentiles_hu.p5, 'HU') +
+                    metric('95th percentile', w.percentiles_hu.p95, 'HU') + '</div>' +
+                    (dm.left_lung ? '<div class="qa-card"><h4>Left lung</h4>' +
+                        metric('Mean', dm.left_lung.mean_hu, 'HU') + metric('Median', dm.left_lung.median_hu, 'HU') +
+                        metric('Std deviation', dm.left_lung.std_hu, 'HU') + '</div>' : '') +
+                    (dm.right_lung ? '<div class="qa-card"><h4>Right lung</h4>' +
+                        metric('Mean', dm.right_lung.mean_hu, 'HU') + metric('Median', dm.right_lung.median_hu, 'HU') +
+                        metric('Std deviation', dm.right_lung.std_hu, 'HU') + '</div>' : '') +
+                    '</div></div>';
+                if (a.histogram && a.histogram.status === 'OK') {
+                    h += '<div class="qa-section"><h3>Density distribution</h3><div class="qa-card">' +
+                         histogramSVG(a.histogram.regions) + '</div></div>';
+                }
+            } else { h += '<div class="qa-section">' + unavailable('Lung density', dm) + '</div>'; }
+
+            const rm = a.regional_metrics;
+            if (rm.status === 'OK') {
+                h += '<div class="qa-section"><h3>Regional distribution</h3><div class="qa-grid">';
+                if (rm.zones && rm.zones.status === 'OK') {
+                    h += '<div class="qa-card"><h4>Superior &ndash; inferior zones</h4>';
+                    ['upper', 'middle', 'lower'].forEach(z => {
+                        const r = rm.zones.regions[z];
+                        h += barRow(z, r.percent_of_lung, r.percent_of_lung + '%');
+                    });
+                    h += '<p class="qa-provenance">Equal thirds of the lung&rsquo;s own superior&ndash;inferior extent. ' +
+                         'A geometric convention, not lobe boundaries.</p></div>';
+                }
+                if (rm.pleural_bands && rm.pleural_bands.status === 'OK') {
+                    h += '<div class="qa-card"><h4>Distance from pleura</h4>';
+                    ['peripheral', 'central', 'subpleural'].forEach(b => {
+                        const r = rm.pleural_bands.regions[b];
+                        h += barRow(b, r.percent_of_lung, r.percent_of_lung + '%');
+                    });
+                    h += '<p class="qa-provenance">Peripheral = within ' +
+                         esc(rm.pleural_bands.definition.peripheral_band_mm) + ' mm of the lung boundary; ' +
+                         'subpleural within ' + esc(rm.pleural_bands.definition.subpleural_band_mm) +
+                         ' mm. Positional only.</p></div>';
+                }
+                h += '</div></div>';
+            } else { h += '<div class="qa-section">' + unavailable('Regional distribution', rm) + '</div>'; }
+
+            const asy = a.asymmetry;
+            if (asy.status === 'OK') {
+                h += '<div class="qa-section"><h3>Left &ndash; right comparison</h3><div class="qa-grid"><div class="qa-card">' +
+                    metric('Volume asymmetry index', asy.volume_asymmetry_index) +
+                    metric('Mean HU difference (L &minus; R)', asy.mean_hu_difference, 'HU') +
+                    '<p class="qa-provenance">' + esc(asy.volume_asymmetry_definition) + '</p>' +
+                    (asy.caveat ? '<p class="qa-provenance" style="color:#d9a05b;">' + esc(asy.caveat) + '</p>' : '') +
+                    '</div></div></div>';
+            } else { h += '<div class="qa-section">' + unavailable('Left-right comparison', asy) + '</div>'; }
+
+            h += '<div class="qa-section"><h3>Not available in this build</h3><div class="qa-grid">' +
+                unavailable('Lobe analysis', a.lobe_metrics) +
+                unavailable('Structural findings', a.findings) +
+                unavailable('Airways', a.airways) +
+                unavailable('Vasculature', a.vasculature) +
+                unavailable('Comparison with a prior study', a.longitudinal) +
+                '</div></div>';
+            return h;
+        }
+
+        function statsTable(title, s) {
+            if (!s || s.status !== 'OK') return '';
+            const p = s.percentiles_hu;
+            return '<tr><td>' + esc(title) + '</td><td>' + s.volume_ml + '</td><td>' + s.mean_hu + '</td>' +
+                '<td>' + s.median_hu + '</td><td>' + s.std_hu + '</td><td>' + s.min_hu + '</td><td>' + s.max_hu + '</td>' +
+                '<td>' + p.p5 + '</td><td>' + p.p10 + '</td><td>' + p.p25 + '</td><td>' + p.p75 + '</td>' +
+                '<td>' + p.p90 + '</td><td>' + p.p95 + '</td><td>' + s.skewness + '</td><td>' + s.kurtosis_excess + '</td></tr>';
+        }
+
+        function renderAdvanced(a) {
+            let h = '<div class="qa-section"><h3>Full density statistics</h3><div class="qa-card qa-scroll">' +
+                '<table class="qa-table"><thead><tr><th>Region</th><th>Vol mL</th><th>Mean</th><th>Median</th>' +
+                '<th>SD</th><th>Min</th><th>Max</th><th>p5</th><th>p10</th><th>p25</th><th>p75</th><th>p90</th>' +
+                '<th>p95</th><th>Skew</th><th>Kurt</th></tr></thead><tbody>';
+            const dm = a.density_metrics;
+            if (dm.status === 'OK') {
+                h += statsTable('Whole lungs', dm.whole_lungs);
+                h += statsTable('Left lung', dm.left_lung);
+                h += statsTable('Right lung', dm.right_lung);
+                const rm = a.regional_metrics;
+                if (rm.status === 'OK' && rm.zones && rm.zones.status === 'OK') {
+                    ['upper', 'middle', 'lower'].forEach(z => h += statsTable('Zone: ' + z, rm.zones.regions[z].density));
+                }
+                if (rm.status === 'OK' && rm.pleural_bands && rm.pleural_bands.status === 'OK') {
+                    ['peripheral', 'central', 'subpleural'].forEach(b =>
+                        h += statsTable('Band: ' + b, rm.pleural_bands.regions[b].density));
+                }
+            }
+            h += '</tbody></table><p class="qa-provenance">Percentiles use linear interpolation between order ' +
+                 'statistics. SD is the population standard deviation (ddof = 0). Kurtosis is excess kurtosis ' +
+                 '(normal distribution = 0).</p></div></div>';
+
+            h += '<div class="qa-section"><h3>All scan-quality checks</h3><div class="qa-card qa-scroll">' +
+                 '<table class="qa-table"><thead><tr><th>Check</th><th>Status</th><th>Value</th><th>Detail</th></tr></thead><tbody>' +
+                 a.scan_quality.checks.map(c => '<tr><td>' + esc(c.name) + '</td><td>' + statusPill(c.status) +
+                    '</td><td>' + esc(c.value === null || c.value === undefined ? '—' :
+                        (typeof c.value === 'object' ? JSON.stringify(c.value) : c.value)) +
+                    '</td><td style="color:#8b98ab;">' + esc(c.detail) + '</td></tr>').join('') +
+                 '</tbody></table></div></div>';
+
+            const tr = a.texture_radiomics;
+            h += '<div class="qa-section"><h3>Radiomics</h3><div class="qa-card">' +
+                metric('First-order statistics', tr.first_order) +
+                ['glcm', 'glrlm', 'glszm', 'ngtdm', 'gldm', 'shape_features'].map(k =>
+                    '<div class="qa-metric"><span class="k">' + k.toUpperCase() + '</span>' +
+                    '<span class="v na">NOT AVAILABLE</span></div>').join('') +
+                '<p class="qa-provenance">' + esc(tr.note) + ' Requires: ' + esc(tr.requires) + '</p></div></div>';
+
+            h += '<div class="qa-section"><h3>Processing provenance</h3><div class="qa-card">' +
+                metric('Analysis version', a.analysis_version) +
+                metric('Segmentation method version', a.provenance_summary ? a.provenance_summary.segmentation_method_version : null) +
+                metric('Model-derived values', a.provenance_summary ? a.provenance_summary.model_derived_values : null) +
+                metric('Voxel volume', a.voxel_volume_mm3, 'mm³') +
+                metric('Spacing (x, y, z)', a.spacing_mm ? a.spacing_mm.join(' × ') : null, 'mm') +
+                metric('Generated at', a.generated_at) +
+                (a.provenance_summary ? '<p class="qa-provenance">' + esc(a.provenance_summary.note) + '</p>' : '') +
+                '<p class="qa-provenance">Segmentation method: ' +
+                esc(a.provenance_summary ? a.provenance_summary.segmentation_method : '—') + '</p>' +
+                '</div></div>';
+
+            if (a.warnings && a.warnings.length) {
+                h += '<div class="qa-section"><h3>Warnings carried from processing</h3><div class="qa-card">' +
+                    a.warnings.map(w => '<div class="qa-metric"><span class="k">' + esc(w) + '</span></div>').join('') +
+                    '</div></div>';
+            }
+            return h;
+        }
+
+        function render() {
+            if (!analysis) return;
+            bodyEl.innerHTML = mode === 'clinical' ? renderClinical(analysis) : renderAdvanced(analysis);
+            // metric -> viewer connection: selecting a volume card shows that
+            // side in the 3D view, so a number can always be traced back to
+            // the anatomy it came from.
+            bodyEl.querySelectorAll('[data-focus]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const which = el.getAttribute('data-focus');
+                    const part = which === 'whole' ? 'combined' : which;
+                    const btn = document.querySelector('[data-part="' + part + '"]');
+                    if (btn && !btn.disabled) {
+                        document.querySelector('[data-layout="3d"]').click();
+                        btn.click();
+                    }
+                });
+            });
+        }
+
+        async function load(refresh) {
+            errEl.style.display = 'none';
+            runBtn.disabled = true; refreshBtn.disabled = true;
+            const label = runBtn.textContent;
+            runBtn.textContent = 'Computing…';
+            try {
+                const r = await fetch('/api/dicom/study/' + studyId + '/analysis' + (refresh ? '?refresh=1' : ''));
+                const data = await r.json();
+                if (!r.ok) {
+                    errEl.textContent = data.message || 'Analysis could not be computed.';
+                    errEl.style.display = 'block';
+                    return;
+                }
+                analysis = data.analysis;
+                runBtn.style.display = 'none';
+                refreshBtn.style.display = '';
+                render();
+            } catch (e) {
+                errEl.textContent = 'Network error while computing the analysis.';
+                errEl.style.display = 'block';
+            } finally {
+                runBtn.disabled = false; refreshBtn.disabled = false; runBtn.textContent = label;
+            }
+        }
+
+        runBtn.addEventListener('click', () => load(false));
+        refreshBtn.addEventListener('click', () => load(true));
+        document.querySelectorAll('[data-qa-mode]').forEach(b => {
+            b.addEventListener('click', () => {
+                document.querySelectorAll('[data-qa-mode]').forEach(x => x.classList.remove('active'));
+                b.classList.add('active');
+                mode = b.getAttribute('data-qa-mode');
+                render();
+            });
+        });
+    })();
+
+    // Exposed so the 3D module (loaded below) can jump the 2D viewer to a
+    // point selected on the 3D model, and read current voxel/volume state.
+    window.__ctViewer = {
+        loadSlice, updateAllCrosshairs, fetchVoxel,
+        setCoord: (x, y, z) => { coord.x = x; coord.y = y; coord.z = z; },
+        getCoord: () => ({ x: coord.x, y: coord.y, z: coord.z }),
+        getVol: () => ({ cols: vol.cols, rows: vol.rows, slices: vol.slices }),
+    };
+
+    init();
+})();
+</script>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const studyId = {{ study_id | tojson }};
+const API = (path) => '/api/dicom/study/' + studyId + path;
+
+// ---------------------------------------------------------------------------
+// Coordinate remap: DICOM patient space (LPS mm) <-> Three.js scene space.
+// three.x = patient.x (Left+)     -- radiological display convention: viewed
+//                                     from the front, patient-left appears on
+//                                     the viewer's right, matching the 2D CT
+//                                     viewer and standard radiology practice.
+// three.y = patient.z (Superior+) -- "up" on screen
+// three.z = -patient.y            -- Anterior+ faces the default camera
+// This is a fixed, reversible linear map applied identically to vertices,
+// normals, clip planes, and raycast hits - never an approximation.
+// ---------------------------------------------------------------------------
+function patientToThree(p) { return [p[0], p[2], -p[1]]; }
+function threeToPatient(t) { return [t[0], -t[2], t[1]]; }
+
+function base64ToBuffer(b64) {
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes.buffer;
+}
+
+function idxToWorld(origin, colC, rowC, sliceC, spacing, k, j, i) {
+    return [0, 1, 2].map(a => origin[a] + i * spacing[0] * colC[a] + j * spacing[1] * rowC[a] + k * spacing[2] * sliceC[a]);
+}
+
+const state = {
+    geometry: null,
+    segmentation: null,
+    meshCache: {},
+    quality: 'interactive',
+    part: 'combined',
+    renderMode: 'surface',
+    opacity: 1.0,
+    clip: {
+        axial: { enabled: false, value: 1.0, axis: 1, sign: -1 },
+        coronal: { enabled: false, value: 1.0, axis: 2, sign: -1 },
+        sagittal: { enabled: false, value: 1.0, axis: 0, sign: -1 },
+    },
+    measure: { active: false, points: [] },
+    volumeTexture: null,
+    volumeMesh: null,
+    volumeWL: -600, volumeWW: 1500,
+};
+
+// ---------------------------------------------------------------------------
+// UI element refs
+// ---------------------------------------------------------------------------
+const stepper = document.getElementById('stepper3d');
+const segmentBtn = document.getElementById('segmentBtn');
+const controlsPreSegment = document.getElementById('controlsPreSegment');
+const controls3dPrimary = document.getElementById('controls3dPrimary');
+const controls3dSecondary = document.getElementById('controls3dSecondary');
+const clipControls = document.getElementById('clipControls');
+const volumeControls = document.getElementById('volumeControls');
+const error3d = document.getElementById('error3d');
+const warn3d = document.getElementById('warn3d');
+const viewport3dWrap = document.getElementById('viewport3dWrap');
+const viewport3d = document.getElementById('viewport3d');
+const reconInfoBar = document.getElementById('reconInfoBar');
+const selectedPositionPanel = document.getElementById('selectedPositionPanel');
+const measureBar = document.getElementById('measureBar');
+const measureReadout = document.getElementById('measureReadout');
+const partLeftBtn = document.getElementById('partLeftBtn');
+const partRightBtn = document.getElementById('partRightBtn');
+
+function setStep(name, cls) {
+    const el2 = stepper.querySelector('[data-step="' + name + '"]');
+    if (!el2) return;
+    el2.classList.remove('active', 'done', 'failed');
+    if (cls) el2.classList.add(cls);
+}
+function markStepsUpTo(name, doneCls) {
+    const order = ['segment', 'mesh', 'optimize', 'ready'];
+    const idx = order.indexOf(name);
+    order.forEach((s, i) => { if (i < idx) setStep(s, doneCls || 'done'); });
+    setStep(name, 'active');
+}
+
+function showError(message) {
+    error3d.textContent = message;
+    error3d.style.display = 'block';
+}
+function clearError() { error3d.style.display = 'none'; error3d.textContent = ''; }
+function showWarnings(warnings) {
+    if (!warnings || !warnings.length) { warn3d.style.display = 'none'; return; }
+    warn3d.textContent = warnings.join(' ');
+    warn3d.style.display = 'block';
+}
+
+// ---------------------------------------------------------------------------
+// Backend calls
+// ---------------------------------------------------------------------------
+async function fetchGeometry() {
+    const r = await fetch(API('/geometry'));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || 'Failed to load volume geometry.');
+    state.geometry = data.geometry;
+}
+
+async function runSegmentation() {
+    markStepsUpTo('segment');
+    const r = await fetch(API('/segment-lungs'), { method: 'POST' });
+    const data = await r.json();
+    state.segmentation = data;
+    if (!r.ok || !data.success) {
+        setStep('segment', 'failed');
+        showError('Lung segmentation did not pass plausibility checks and 3D reconstruction was not attempted:\n'
+            + (data.warnings || []).join('\n'));
+        return false;
+    }
+    partLeftBtn.disabled = !data.left_right_available;
+    partRightBtn.disabled = !data.left_right_available;
+    showWarnings(data.warnings);
+    return true;
+}
+
+async function fetchMesh(part, quality) {
+    const key = part + ':' + quality;
+    if (state.meshCache[key]) return state.meshCache[key];
+    const r = await fetch(API('/reconstruct3d?quality=' + quality + '&part=' + part));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || 'Reconstruction failed.');
+    const mesh = {
+        verts: new Float32Array(base64ToBuffer(data.vertices_b64)),
+        faces: new Uint32Array(base64ToBuffer(data.faces_b64)),
+        normals: new Float32Array(base64ToBuffer(data.normals_b64)),
+        vertexCount: data.vertex_count, triangleCount: data.triangle_count,
+        downsampleFactor: data.downsample_factor, boundingBox: data.bounding_box_mm,
+        warnings: data.warnings, quality: data.quality, part: data.part,
+    };
+    state.meshCache[key] = mesh;
+    return mesh;
+}
+
+async function fetchVolumeTexture(maxDim) {
+    const r = await fetch(API('/volume-texture?max_dim=' + maxDim));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || 'Failed to load CT volume texture.');
+    return {
+        raw: new Int16Array(base64ToBuffer(data.data_b64)),
+        shape: data.shape, spacingMm: data.spacing_mm,
+        downsampleFactor: data.downsample_factor, warning: data.warning,
+    };
+}
+
+// ---------------------------------------------------------------------------
+// Three.js scene
+// ---------------------------------------------------------------------------
+let renderer, scene, camera, controls;
+let currentMeshes = [];
+let markerMesh = null;
+let measureGroup = new THREE.Group();
+// min/max must exist from the start: activeClipPlanes() indexes them, and a
+// clip toggle could otherwise be read before computeSceneBounds() first runs.
+let sceneBounds = { center: [0, 0, 0], radius: 100, min: [-100, -100, -100], max: [100, 100, 100] };
+
+function initScene() {
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x05070d);
+    camera = new THREE.PerspectiveCamera(45, viewport3d.clientWidth / Math.max(viewport3d.clientHeight, 1), 0.1, 20000);
+    renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(viewport3d.clientWidth, viewport3d.clientHeight);
+    renderer.localClippingEnabled = true;
+    viewport3d.appendChild(renderer.domElement);
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+    const key = new THREE.DirectionalLight(0xffffff, 0.95);
+    key.position.set(1, 1.4, 1.6);
+    scene.add(key);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.35);
+    fill.position.set(-1.2, -0.5, -1);
+    scene.add(fill);
+
+    scene.add(measureGroup);
+
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.08;
+    camera.position.set(0, 0, 300);
+    controls.update();
+
+    window.addEventListener('resize', onResize);
+
+    let pointerDown = null;
+    renderer.domElement.addEventListener('pointerdown', (e) => { pointerDown = [e.clientX, e.clientY]; });
+    renderer.domElement.addEventListener('pointerup', (e) => {
+        if (!pointerDown) return;
+        const dx = e.clientX - pointerDown[0], dy = e.clientY - pointerDown[1];
+        pointerDown = null;
+        if (Math.hypot(dx, dy) > 4) return;
+        handleClick(e);
+    });
+
+    animate();
+}
+
+function onResize() {
+    if (!renderer) return;
+    const w = viewport3d.clientWidth, h = Math.max(viewport3d.clientHeight, 1);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    renderer.render(scene, camera);
+}
+
+function clearCurrentMeshes() {
+    currentMeshes.forEach((m) => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+    currentMeshes = [];
+}
+
+function activeClipPlanes() {
+    const planes = [];
+    const c = state.clip;
+    if (c.axial.enabled) {
+        const y = THREE.MathUtils.lerp(sceneBounds.min[1], sceneBounds.max[1], c.axial.value);
+        planes.push(new THREE.Plane(new THREE.Vector3(0, -1, 0), y));
+    }
+    if (c.coronal.enabled) {
+        const z = THREE.MathUtils.lerp(sceneBounds.min[2], sceneBounds.max[2], c.coronal.value);
+        planes.push(new THREE.Plane(new THREE.Vector3(0, 0, -1), z));
+    }
+    if (c.sagittal.enabled) {
+        const x = THREE.MathUtils.lerp(sceneBounds.min[0], sceneBounds.max[0], c.sagittal.value);
+        planes.push(new THREE.Plane(new THREE.Vector3(-1, 0, 0), x));
+    }
+    return planes;
+}
+
+function applyClipping() {
+    const planes = activeClipPlanes();
+    currentMeshes.forEach((m) => { m.material.clippingPlanes = planes; });
+    if (state.volumeMesh) {
+        const c = state.clip;
+        state.volumeMesh.material.uniforms.uClipEnabled.value.set(
+            c.axial.enabled ? 1 : 0, c.coronal.enabled ? 1 : 0, c.sagittal.enabled ? 1 : 0);
+        const planeVecs = [
+            new THREE.Vector4(0, -1, 0, THREE.MathUtils.lerp(sceneBounds.min[1], sceneBounds.max[1], c.axial.value)),
+            new THREE.Vector4(0, 0, -1, THREE.MathUtils.lerp(sceneBounds.min[2], sceneBounds.max[2], c.coronal.value)),
+            new THREE.Vector4(-1, 0, 0, THREE.MathUtils.lerp(sceneBounds.min[0], sceneBounds.max[0], c.sagittal.value)),
+        ];
+        state.volumeMesh.material.uniforms.uClipPlanes.value = planeVecs;
+    }
+}
+
+function buildThreeMeshFromData(meshData, color) {
+    const n = meshData.vertexCount;
+    const pos = new Float32Array(n * 3);
+    const norm = new Float32Array(n * 3);
+    for (let v = 0; v < n; v++) {
+        const px = meshData.verts[v * 3], py = meshData.verts[v * 3 + 1], pz = meshData.verts[v * 3 + 2];
+        pos[v * 3] = px; pos[v * 3 + 1] = pz; pos[v * 3 + 2] = -py;
+        const nx = meshData.normals[v * 3], ny = meshData.normals[v * 3 + 1], nz = meshData.normals[v * 3 + 2];
+        norm[v * 3] = nx; norm[v * 3 + 1] = nz; norm[v * 3 + 2] = -ny;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(norm, 3));
+    geo.setIndex(new THREE.BufferAttribute(meshData.faces, 1));
+    const mat = new THREE.MeshStandardMaterial({
+        color, roughness: 0.55, metalness: 0.02, side: THREE.DoubleSide,
+        transparent: true, opacity: state.opacity, clippingPlanes: activeClipPlanes(),
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.userData.isLungSurface = true;
+    return mesh;
+}
+
+function computeSceneBounds() {
+    const box = new THREE.Box3();
+    currentMeshes.forEach((m) => box.expandByObject(m));
+    if (box.isEmpty()) { sceneBounds = { center: [0, 0, 0], radius: 100, min: [-100, -100, -100], max: [100, 100, 100] }; return; }
+    const c = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    sceneBounds = {
+        center: [c.x, c.y, c.z], radius: size.length() / 2,
+        min: [box.min.x, box.min.y, box.min.z], max: [box.max.x, box.max.y, box.max.z],
+    };
+}
+
+function frameCamera() {
+    const dist = Math.max(sceneBounds.radius * 2.4, 30);
+    camera.position.set(sceneBounds.center[0], sceneBounds.center[1], sceneBounds.center[2] + dist);
+    camera.up.set(0, 1, 0);
+    controls.target.set(...sceneBounds.center);
+    camera.near = Math.max(dist / 100, 0.1);
+    camera.far = dist * 20;
+    camera.updateProjectionMatrix();
+    controls.update();
+}
+
+async function loadSurfaceMeshes() {
+    clearCurrentMeshes();
+    const parts = state.part === 'combined' ? ['combined'] : [state.part];
+    for (const part of parts) {
+        const meshData = await fetchMesh(part, state.quality);
+        const color = part === 'left' ? 0xd98a7a : (part === 'right' ? 0x7aa8d9 : 0xd6b3a4);
+        const mesh = buildThreeMeshFromData(meshData, color);
+        scene.add(mesh);
+        currentMeshes.push(mesh);
+        renderReconInfo(meshData);
+        showWarnings([...(state.segmentation.warnings || []), ...(meshData.warnings || [])]);
+    }
+    computeSceneBounds();
+    applyClipping();
+}
+
+function renderReconInfo(meshData) {
+    const geom = state.geometry;
+    const items = [
+        ['Organ', 'Lungs'],
+        ['Segmentation Method', state.segmentation.method],
+        ['Segmentation Quality', state.segmentation.status],
+        ['Lung Volume', (state.segmentation.stats.lung_volume_ml || 0).toFixed(0) + ' mL'],
+        ['Surface Mesh', meshData.vertexCount.toLocaleString() + ' vertices / ' + meshData.triangleCount.toLocaleString() + ' triangles'],
+        ['Voxel Spacing (mm)', geom.spacing_mm.map(v => v.toFixed(2)).join(' × ')],
+        ['Mesh Quality', meshData.quality + (meshData.downsampleFactor > 1 ? ' (' + meshData.downsampleFactor + 'x downsampled)' : ' (native resolution)')],
+        ['Reconstruction Status', 'Ready'],
+    ];
+    reconInfoBar.innerHTML = items.map(([label, value]) =>
+        '<div class="info-item"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>'
+    ).join('');
+    reconInfoBar.style.display = 'flex';
+}
+
+// ---------------------------------------------------------------------------
+// Direct volume rendering (GPU raycasting through the real HU volume)
+// ---------------------------------------------------------------------------
+const VOLUME_VERT = `
+out vec3 vWorldPosition;
+void main() {
+    vWorldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+const VOLUME_FRAG = `
+precision highp float;
+precision highp sampler3D;
+uniform sampler3D uTex;
+uniform vec3 uBoxMin;
+uniform vec3 uBoxMax;
+uniform float uWL;
+uniform float uWW;
+uniform float uOpacity;
+uniform float uSteps;
+uniform vec3 uClipEnabled;
+uniform vec4 uClipPlanes[3];
+in vec3 vWorldPosition;
+out vec4 outColor;
+
+bool clippedAt(vec3 p) {
+    for (int i = 0; i < 3; i++) {
+        if (uClipEnabled[i] > 0.5) {
+            vec4 pl = uClipPlanes[i];
+            if (dot(pl.xyz, p) + pl.w < 0.0) return true;
+        }
+    }
+    return false;
+}
+
+void main() {
+    // Must be explicitly zeroed: a GLSL out variable starts undefined, and
+    // the front-to-back compositing below accumulates into it.
+    outColor = vec4(0.0);
+
+    vec3 rayDir = normalize(vWorldPosition - cameraPosition);
+    vec3 invDir = 1.0 / rayDir;
+    vec3 t0 = (uBoxMin - cameraPosition) * invDir;
+    vec3 t1 = (uBoxMax - cameraPosition) * invDir;
+    vec3 tminV = min(t0, t1);
+    vec3 tmaxV = max(t0, t1);
+    float tNear = max(max(tminV.x, tminV.y), tminV.z);
+    float tFar = min(min(tmaxV.x, tmaxV.y), tmaxV.z);
+    tNear = max(tNear, 0.0);
+    if (tNear >= tFar) discard;
+
+    float stepSize = (tFar - tNear) / uSteps;
+    vec3 boxSize = uBoxMax - uBoxMin;
+    float lo = uWL - uWW * 0.5;
+    float hi = uWL + uWW * 0.5;
+
+    for (int s = 0; s < 400; s++) {
+        if (float(s) >= uSteps) break;
+        float t = tNear + stepSize * (float(s) + 0.5);
+        vec3 worldPos = cameraPosition + rayDir * t;
+        if (!clippedAt(worldPos)) {
+            vec3 uvw = (worldPos - uBoxMin) / boxSize;
+            float raw = texture(uTex, uvw).r;
+            float hu = raw * 4095.0 - 1024.0;
+            float norm = clamp((hu - lo) / max(hi - lo, 1.0), 0.0, 1.0);
+            float alpha = norm * 0.14 * uOpacity;
+            vec3 color = vec3(norm);
+            outColor.rgb += (1.0 - outColor.a) * alpha * color;
+            outColor.a += (1.0 - outColor.a) * alpha;
+            if (outColor.a > 0.98) break;
+        }
+    }
+    if (outColor.a < 0.01) discard;
+}
+`;
+
+function disposeVolumeMesh() {
+    if (state.volumeMesh) {
+        scene.remove(state.volumeMesh);
+        state.volumeMesh.geometry.dispose();
+        state.volumeMesh.material.uniforms.uTex.value.dispose();
+        state.volumeMesh.material.dispose();
+        state.volumeMesh = null;
+    }
+}
+
+async function loadVolumeRendering() {
+    disposeVolumeMesh();
+    const maxDim = state.quality === 'high_fidelity' ? 224 : 128;
+    const vt = await fetchVolumeTexture(maxDim);
+    if (vt.warning) showWarnings([vt.warning]);
+
+    const { slices, rows, cols } = vt.shape;
+    const n = slices * rows * cols;
+    const u8 = new Uint8Array(n);
+    for (let idx = 0; idx < n; idx++) {
+        const v = Math.round(((vt.raw[idx] + 1024) / 4095) * 255);
+        u8[idx] = v < 0 ? 0 : (v > 255 ? 255 : v);
+    }
+    const tex = new THREE.Data3DTexture(u8, cols, rows, slices);
+    tex.format = THREE.RedFormat;
+    tex.type = THREE.UnsignedByteType;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.wrapS = tex.wrapT = tex.wrapR = THREE.ClampToEdgeWrapping;
+    tex.unpackAlignment = 1;
+    tex.needsUpdate = true;
+
+    const g = state.geometry;
+    const corners = [];
+    for (const k of [0, slices]) for (const j of [0, rows]) for (const i of [0, cols]) {
+        corners.push(idxToWorld(g.origin_mm, g.col_cosines, g.row_cosines, g.slice_cosines, vt.spacingMm, k, j, i));
+    }
+    let bMin = [Infinity, Infinity, Infinity], bMax = [-Infinity, -Infinity, -Infinity];
+    corners.forEach((p) => {
+        const t = patientToThree(p);
+        for (let a = 0; a < 3; a++) { bMin[a] = Math.min(bMin[a], t[a]); bMax[a] = Math.max(bMax[a], t[a]); }
+    });
+    const size = [bMax[0] - bMin[0], bMax[1] - bMin[1], bMax[2] - bMin[2]];
+    const center = [(bMin[0] + bMax[0]) / 2, (bMin[1] + bMax[1]) / 2, (bMin[2] + bMax[2]) / 2];
+
+    const geo = new THREE.BoxGeometry(size[0], size[1], size[2]);
+    const mat = new THREE.ShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        uniforms: {
+            uTex: { value: tex },
+            uBoxMin: { value: new THREE.Vector3(...bMin) },
+            uBoxMax: { value: new THREE.Vector3(...bMax) },
+            uWL: { value: state.volumeWL }, uWW: { value: state.volumeWW },
+            uOpacity: { value: 0.45 }, uSteps: { value: 180 },
+            uClipEnabled: { value: new THREE.Vector3(0, 0, 0) },
+            uClipPlanes: { value: [new THREE.Vector4(0, -1, 0, 0), new THREE.Vector4(0, 0, -1, 0), new THREE.Vector4(-1, 0, 0, 0)] },
+        },
+        vertexShader: VOLUME_VERT, fragmentShader: VOLUME_FRAG,
+        side: THREE.BackSide, transparent: true, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(...center);
+    scene.add(mesh);
+    state.volumeMesh = mesh;
+
+    if (!currentMeshes.length) {
+        sceneBounds = {
+            center, radius: Math.hypot(...size) / 2,
+            min: bMin, max: bMax,
+        };
+    }
+    applyClipping();
+}
+
+// ---------------------------------------------------------------------------
+// Render-mode orchestration
+// ---------------------------------------------------------------------------
+async function applyRenderMode() {
+    clearError();
+    if (state.renderMode === 'surface' || state.renderMode === 'both') {
+        await loadSurfaceMeshes();
+    } else {
+        clearCurrentMeshes();
+    }
+    if (state.renderMode === 'volume' || state.renderMode === 'both') {
+        volumeControls.style.display = 'flex';
+        await loadVolumeRendering();
+    } else {
+        volumeControls.style.display = 'none';
+        disposeVolumeMesh();
+    }
+    computeSceneBounds();
+    if (state.renderMode === 'volume' && state.volumeMesh) {
+        const bb = new THREE.Box3().setFromObject(state.volumeMesh);
+        sceneBounds = {
+            center: bb.getCenter(new THREE.Vector3()).toArray(),
+            radius: bb.getSize(new THREE.Vector3()).length() / 2,
+            min: [bb.min.x, bb.min.y, bb.min.z], max: [bb.max.x, bb.max.y, bb.max.z],
+        };
+    }
+    applyClipping();
+    frameCamera();
+}
+
+// ---------------------------------------------------------------------------
+// Selection / crosshair sync with the 2D viewer
+// ---------------------------------------------------------------------------
+const raycaster = new THREE.Raycaster();
+const mouseNdc = new THREE.Vector2();
+
+function worldToVoxel(x, y, z) {
+    const g = state.geometry;
+    const d = [x - g.origin_mm[0], y - g.origin_mm[1], z - g.origin_mm[2]];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let i = dot(d, g.col_cosines) / g.spacing_mm[0];
+    let j = dot(d, g.row_cosines) / g.spacing_mm[1];
+    let k = dot(d, g.slice_cosines) / g.spacing_mm[2];
+    i = Math.min(Math.max(Math.round(i), 0), g.shape.cols - 1);
+    j = Math.min(Math.max(Math.round(j), 0), g.shape.rows - 1);
+    k = Math.min(Math.max(Math.round(k), 0), g.shape.slices - 1);
+    return { i, j, k };
+}
+
+function placeMarker(point) {
+    if (!markerMesh) {
+        const size = Math.max(sceneBounds.radius * 0.02, 1.5);
+        const geo = new THREE.SphereGeometry(size, 16, 16);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x22d3ee, depthTest: false });
+        markerMesh = new THREE.Mesh(geo, mat);
+        markerMesh.renderOrder = 999;
+        scene.add(markerMesh);
+    }
+    markerMesh.position.copy(point);
+}
+
+async function handleSelectionClick(patient, threePoint) {
+    placeMarker(threePoint);
+    const { i, j, k } = worldToVoxel(patient[0], patient[1], patient[2]);
+    window.__ctViewer.setCoord(i, j, k);
+    await Promise.all([
+        window.__ctViewer.loadSlice('axial', k),
+        window.__ctViewer.loadSlice('coronal', j),
+        window.__ctViewer.loadSlice('sagittal', i),
+    ]);
+    window.__ctViewer.updateAllCrosshairs();
+    await window.__ctViewer.fetchVoxel();
+
+    const r = await fetch(API('/voxel?x=' + i + '&y=' + j + '&z=' + k));
+    const voxel = await r.json();
+    selectedPositionPanel.innerHTML = [
+        ['X (mm)', patient[0].toFixed(1)], ['Y (mm)', patient[1].toFixed(1)], ['Z (mm)', patient[2].toFixed(1)],
+        ['Voxel i,j,k', i + ', ' + j + ', ' + k],
+        ['HU', voxel.hu_available ? Math.round(voxel.hu) : 'unavailable'],
+    ].map(([label, value]) => '<div class="info-item"><div class="label">' + label + '</div><div class="value">' + value + '</div></div>').join('');
+    selectedPositionPanel.style.display = 'flex';
+}
+
+function addMeasureMarker(point) {
+    const geo = new THREE.SphereGeometry(Math.max(sceneBounds.radius * 0.018, 1.2), 12, 12);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xf59e0b, depthTest: false });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.copy(point);
+    m.renderOrder = 998;
+    measureGroup.add(m);
+}
+function addMeasureLine(a, b) {
+    const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
+    const mat = new THREE.LineBasicMaterial({ color: 0xf59e0b, depthTest: false });
+    const line = new THREE.Line(geo, mat);
+    line.renderOrder = 998;
+    measureGroup.add(line);
+}
+function clearMeasureVisuals() {
+    while (measureGroup.children.length) {
+        const c = measureGroup.children.pop();
+        c.geometry.dispose(); c.material.dispose();
+    }
+}
+
+function handleMeasureClick(patient, threePoint) {
+    if (state.measure.points.length >= 2) {
+        clearMeasureVisuals();
+        state.measure.points = [];
+    }
+    state.measure.points.push({ patient, three: threePoint.clone() });
+    addMeasureMarker(threePoint);
+    if (state.measure.points.length === 1) {
+        measureReadout.textContent = 'Point A set - click Point B on the model.';
+    } else {
+        const [a, b] = state.measure.points;
+        addMeasureLine(a.three, b.three);
+        const dx = a.patient[0] - b.patient[0], dy = a.patient[1] - b.patient[1], dz = a.patient[2] - b.patient[2];
+        const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        measureReadout.textContent = 'Distance: ' + dist.toFixed(1) + ' mm (real patient-space distance, from CT voxel spacing).';
+    }
+}
+
+function handleClick(e) {
+    // Point selection raycasts against the segmented lung SURFACE. In
+    // volume-only mode there is no surface to intersect, and picking a point
+    // out of a semi-transparent density field would mean inventing a depth,
+    // so selection is disabled there and says so rather than ignoring clicks.
+    if (!currentMeshes.length) {
+        showWarnings(['Point selection requires a lung surface to intersect. Switch to "3D Surface" '
+            + 'or "Surface + Volume" to select a location and jump to the matching CT slice.']);
+        return;
+    }
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouseNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouseNdc, camera);
+    const hits = raycaster.intersectObjects(currentMeshes, false);
+    if (!hits.length) return;
+    const point = hits[0].point;
+    const patient = threeToPatient([point.x, point.y, point.z]);
+    if (state.measure.active) {
+        handleMeasureClick(patient, point);
+    } else {
+        handleSelectionClick(patient, point);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// View presets
+// ---------------------------------------------------------------------------
+function applyPreset(name) {
+    const dist = Math.max(sceneBounds.radius * 2.4, 30);
+    const c = sceneBounds.center;
+    const positions = {
+        anterior: [c[0], c[1], c[2] + dist], posterior: [c[0], c[1], c[2] - dist],
+        left: [c[0] + dist, c[1], c[2]], right: [c[0] - dist, c[1], c[2]],
+        superior: [c[0], c[1] + dist, c[2]], inferior: [c[0], c[1] - dist, c[2]],
+    };
+    const ups = {
+        anterior: [0, 1, 0], posterior: [0, 1, 0], left: [0, 1, 0], right: [0, 1, 0],
+        superior: [0, 0, -1], inferior: [0, 0, 1],
+    };
+    camera.up.set(...ups[name]);
+    camera.position.set(...positions[name]);
+    controls.target.set(...c);
+    camera.lookAt(controls.target);
+    controls.update();
+}
+
+// ---------------------------------------------------------------------------
+// UI wiring
+// ---------------------------------------------------------------------------
+segmentBtn.addEventListener('click', async () => {
+    segmentBtn.disabled = true;
+    clearError();
+    try {
+        if (!state.geometry) await fetchGeometry();
+        const ok = await runSegmentation();
+        if (!ok) { segmentBtn.disabled = false; return; }
+
+        markStepsUpTo('mesh');
+        viewport3dWrap.style.display = 'block';
+        if (!renderer) initScene();
+
+        markStepsUpTo('optimize');
+        await applyRenderMode();
+
+        markStepsUpTo('ready', 'done');
+        setStep('ready', 'done');
+
+        controlsPreSegment.style.display = 'none';
+        controls3dPrimary.style.display = 'flex';
+        controls3dSecondary.style.display = 'flex';
+        clipControls.style.display = 'flex';
+        measureBar.style.display = 'flex';
+    } catch (err) {
+        setStep('mesh', 'failed');
+        showError('3D reconstruction failed: ' + err.message);
+        segmentBtn.disabled = false;
+    }
+});
+
+document.querySelectorAll('[data-quality]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+        document.querySelectorAll('[data-quality]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.quality = btn.getAttribute('data-quality');
+        clearError();
+        try { await applyRenderMode(); } catch (err) { showError(err.message); }
+    });
+});
+document.querySelectorAll('[data-part]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        document.querySelectorAll('[data-part]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.part = btn.getAttribute('data-part');
+        clearError();
+        try { await applyRenderMode(); } catch (err) { showError(err.message); }
+    });
+});
+document.querySelectorAll('[data-mode]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+        document.querySelectorAll('[data-mode]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.renderMode = btn.getAttribute('data-mode');
+        clearError();
+        try { await applyRenderMode(); } catch (err) { showError(err.message); }
+    });
+});
+
+const opacitySlider = document.getElementById('opacitySlider');
+const opacityReadout = document.getElementById('opacityReadout');
+opacitySlider.addEventListener('input', () => {
+    state.opacity = parseInt(opacitySlider.value, 10) / 100;
+    opacityReadout.textContent = opacitySlider.value + '%';
+    currentMeshes.forEach((m) => { m.material.opacity = state.opacity; });
+});
+
+document.getElementById('volumeOpacitySlider').addEventListener('input', (e) => {
+    if (state.volumeMesh) state.volumeMesh.material.uniforms.uOpacity.value = parseInt(e.target.value, 10) / 100;
+});
+document.querySelectorAll('[data-vpreset]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-vpreset]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const presets = { lung: [1500, -600], soft_tissue: [400, 40], bone: [1800, 400] };
+        const [wwv, wlv] = presets[btn.getAttribute('data-vpreset')];
+        state.volumeWW = wwv; state.volumeWL = wlv;
+        if (state.volumeMesh) {
+            state.volumeMesh.material.uniforms.uWW.value = wwv;
+            state.volumeMesh.material.uniforms.uWL.value = wlv;
+        }
+    });
+});
+
+function wireClip(name) {
+    const toggle = document.getElementById('clip' + name[0].toUpperCase() + name.slice(1) + 'Toggle');
+    const slider = document.getElementById('clip' + name[0].toUpperCase() + name.slice(1) + 'Slider');
+    toggle.addEventListener('change', () => { state.clip[name].enabled = toggle.checked; applyClipping(); });
+    slider.addEventListener('input', () => { state.clip[name].value = parseInt(slider.value, 10) / 100; applyClipping(); });
+}
+['axial', 'coronal', 'sagittal'].forEach(wireClip);
+
+document.querySelectorAll('[data-view]').forEach((btn) => {
+    btn.addEventListener('click', () => applyPreset(btn.getAttribute('data-view')));
+});
+document.getElementById('reset3dBtn').addEventListener('click', () => frameCamera());
+
+document.getElementById('measureBtn').addEventListener('click', (e) => {
+    state.measure.active = !state.measure.active;
+    e.target.classList.toggle('active', state.measure.active);
+    measureReadout.textContent = state.measure.active
+        ? 'Click two points on the model to measure distance.'
+        : 'Click "Measure", then two points on the model.';
+});
+document.getElementById('clearMeasureBtn').addEventListener('click', () => {
+    clearMeasureVisuals();
+    state.measure.points = [];
+    measureReadout.textContent = 'Click "Measure", then two points on the model.';
+});
+
+document.getElementById('screenshot3dBtn').addEventListener('click', () => {
+    if (!renderer) return;
+    renderer.render(scene, camera);
+    const src = renderer.domElement;
+    const out = document.createElement('canvas');
+    out.width = src.width; out.height = src.height + 44;
+    const ctx = out.getContext('2d');
+    ctx.fillStyle = '#05070d'; ctx.fillRect(0, 0, out.width, out.height);
+    ctx.drawImage(src, 0, 0);
+    ctx.fillStyle = '#cbd5e1'; ctx.font = '13px monospace';
+    const stamp = 'Quality: ' + state.quality + '  Part: ' + state.part + '  Mode: ' + state.renderMode
+        + '  Clip[A/C/S]: ' + [state.clip.axial.enabled, state.clip.coronal.enabled, state.clip.sagittal.enabled].map(v => v ? '1' : '0').join('/')
+        + '  ' + new Date().toISOString();
+    ctx.fillText(stamp, 10, src.height + 26);
+    const link = document.createElement('a');
+    link.download = 'ct-3d-view.png';
+    link.href = out.toDataURL('image/png');
+    link.click();
+});
+
+document.querySelectorAll('[data-layout]').forEach((btn) => {
+    btn.addEventListener('click', () => setTimeout(onResize, 0));
+});
+</script>
+</body>
+</html>

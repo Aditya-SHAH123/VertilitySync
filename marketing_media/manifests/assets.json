@@ -1,0 +1,10 @@
+{
+  "_comment": [
+    "Reviewed, optimized PUBLIC marketing assets available to the website.",
+    "Empty 'assets' means no Higgsfield generation has been run or approved yet;",
+    "the public site falls back to its built-in procedural (CSS/SVG/canvas) visuals.",
+    "Every entry is public marketing media and is never derived from patient data."
+  ],
+  "version": "1.0.0",
+  "assets": []
+}
