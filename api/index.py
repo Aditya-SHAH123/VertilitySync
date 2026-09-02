@@ -2,9 +2,10 @@ import io
 import os
 import uuid
 import base64
+import sys
 import threading
 from datetime import datetime, timezone
-
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import pydicom
 from pydicom.errors import InvalidDicomError
