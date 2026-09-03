@@ -150,6 +150,9 @@ def main():
 
     # ---------------- the archive imports into the app ----------------
     os.environ.setdefault('DATABASE_PATH', '/tmp/vs_colab_app.db')
+    # Tests must never touch a real Postgres/Supabase instance, even if
+    # DATABASE_URL is set in the real environment/.env for production use.
+    os.environ['DATABASE_URL'] = ''
     os.environ.setdefault('STUDY_STORE_PATH', '/tmp/vs_colab_app_store')
     for p in (os.environ['DATABASE_PATH'],):
         if os.path.exists(p):

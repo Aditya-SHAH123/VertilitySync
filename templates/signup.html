@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Doctor Sign In — VitalitySync</title>
+    <title>Create Account — VitalitySync</title>
     <style>
-        /* Deliberately minimal: the login page carries none of the public
-           site's cinematic media or scroll animation. */
+        /* Mirrors login.html's design system exactly - same dark, minimal,
+           no-marketing-media page, just a different form. */
         :root {
             --bg: #0b0f16; --panel: #131923; --line: #1f2836;
             --text: #e6ebf2; --muted: #8b98ab; --accent: #3b82f6;
@@ -30,6 +30,7 @@
         input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
                 border-radius: 6px; padding: 10px 12px; font-size: 0.92rem; margin-bottom: 16px; }
         input:focus { outline: none; border-color: var(--accent); }
+        .hint { font-size: 0.72rem; color: var(--muted); margin: -12px 0 16px; }
         button { width: 100%; background: var(--accent); color: #fff; border: none; border-radius: 6px;
                  padding: 11px; font-size: 0.92rem; font-weight: 600; cursor: pointer; }
         button:hover:not(:disabled) { background: #2563eb; }
@@ -40,7 +41,7 @@
         .error.visible { display: block; }
 
         .foot { margin-top: 18px; font-size: 0.75rem; color: var(--muted); line-height: 1.6; }
-        .foot a { color: var(--muted); }
+        .foot a { color: var(--accent); }
         .back { display: inline-block; margin-top: 20px; color: var(--muted); font-size: 0.82rem; text-decoration: none; }
         .back:hover { color: var(--text); }
     </style>
@@ -52,30 +53,31 @@
         <div class="name">VitalitySync</div>
     </div>
 
-    <h1>Doctor Sign In</h1>
-    <p class="sub">Access to the clinical workspace is restricted to authorized accounts.</p>
+    <h1>Create Account</h1>
+    <p class="sub">Register as a doctor to start building your patient and imaging history.</p>
 
-    <form id="loginForm" autocomplete="on">
+    <form id="signupForm" autocomplete="on">
         <div class="error" id="errorBox"></div>
+
+        <label for="displayName">Full name</label>
+        <input type="text" id="displayName" name="displayName" autocomplete="name" required maxlength="120">
 
         <label for="email">Email</label>
         <input type="email" id="email" name="email" autocomplete="username" required>
 
         <label for="password">Password</label>
-        <input type="password" id="password" name="password" autocomplete="current-password" required>
+        <input type="password" id="password" name="password" autocomplete="new-password" required minlength="12">
+        <div class="hint">At least 12 characters.</div>
 
-        <button type="submit" id="submitBtn">Sign In</button>
+        <label for="confirmPassword">Confirm password</label>
+        <input type="password" id="confirmPassword" name="confirmPassword" autocomplete="new-password" required minlength="12">
+
+        <button type="submit" id="submitBtn">Create Account</button>
     </form>
 
     <p class="foot">
-        Credentials are verified on the server and passwords are stored only as
-        salted hashes. Sessions use a signed, HttpOnly cookie. Access to every
-        case is re-checked server-side on each request.
-        <br><br>
-        New here? <a href="/signup" style="color: var(--accent);">Create an account</a>.
-        <br><br>
-        Password reset is not yet implemented — contact your administrator to
-        restore access.
+        Passwords are stored only as salted hashes, never in plaintext.
+        Already have an account? <a href="/login">Sign in</a>.
     </p>
 
     <a class="back" href="/">&larr; Back to vitalitysync.com</a>
@@ -83,39 +85,48 @@
 
 <script>
 (function () {
-    const form = document.getElementById('loginForm');
+    const form = document.getElementById('signupForm');
     const errorBox = document.getElementById('errorBox');
     const submitBtn = document.getElementById('submitBtn');
-    const nextUrl = {{ next | tojson }};
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         errorBox.classList.remove('visible');
+
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirmPassword').value;
+        if (password !== confirmPassword) {
+            errorBox.textContent = 'Passwords do not match.';
+            errorBox.classList.add('visible');
+            return;
+        }
+
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Signing in…';
+        submitBtn.textContent = 'Creating account…';
 
         try {
-            const resp = await fetch('/api/auth/login', {
+            const resp = await fetch('/api/auth/signup', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    display_name: document.getElementById('displayName').value,
                     email: document.getElementById('email').value,
-                    password: document.getElementById('password').value,
+                    password: password,
                 }),
             });
             const data = await resp.json();
             if (!resp.ok) {
-                errorBox.textContent = data.message || 'Sign in failed.';
+                errorBox.textContent = data.message || 'Could not create account.';
                 errorBox.classList.add('visible');
                 return;
             }
-            window.location.href = nextUrl || data.redirect || '/cases';
+            window.location.href = data.redirect || '/home';
         } catch (err) {
-            errorBox.textContent = 'Network error while signing in.';
+            errorBox.textContent = 'Network error while creating your account.';
             errorBox.classList.add('visible');
         } finally {
             submitBtn.disabled = false;
-            submitBtn.textContent = 'Sign In';
+            submitBtn.textContent = 'Create Account';
         }
     });
 })();

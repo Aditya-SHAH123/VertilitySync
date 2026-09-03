@@ -95,6 +95,52 @@ derived from screen pixels.
 Free-text note, optionally anchored to a patient-space point via the same
 voxel→mm resolution as `Measurement`.
 
+## Update: `db.py` now also speaks Postgres (Supabase)
+
+The section below ("Why two layers") described a real gap as of the
+previous change: `db.py` (doctors/cases/patients/notes/audit) was
+SQLite-only, so pointing `IMAGING_DATABASE_URL` (the SQLAlchemy layer) at
+Supabase would not have fixed doctor login persistence, since login lives
+in `db.py`'s tables, not the SQLAlchemy ones.
+
+`db.py` has since been made dialect-portable:
+
+- `DATABASE_URL` (a Postgres/Supabase connection string) switches the
+  backend to `psycopg2`; unset, it falls back to SQLite via
+  `DATABASE_PATH`, unchanged from before.
+- Every other module (`auth.py`, `cases.py`, `patients.py`) still writes
+  plain `?`-placeholder SQL and reads dict-like rows - a
+  `_PortableConnection`/`_PortableCursor` pair in `db.py` translates
+  placeholders (`?` → `%s`) and row access (`sqlite3.Row` vs psycopg2's
+  `RealDictCursor`) transparently. No other module changed its query style.
+- The four `cur.lastrowid`-dependent inserts (`create_doctor`,
+  `create_case`, `add_note`, `create_patient`, `create_note`) were changed
+  to `INSERT ... RETURNING id` + `cur.fetchone()["id"]`, which works
+  identically on SQLite ≥3.35 and Postgres - confirmed against this
+  environment's SQLite (3.50.4) directly, not assumed.
+- `cases.grant_access`'s `INSERT OR REPLACE` (SQLite-only syntax) branches
+  to Postgres's `ON CONFLICT ... DO UPDATE` when `conn.dialect == "postgres"`.
+- Boolean columns (`is_demo`, `archived`, `ai_rewritten`) are now bound as
+  Python `bool`, not hand-rolled `1`/`0` integers - required because
+  Postgres's `boolean` type rejects an integer parameter outright, where
+  SQLite's untyped `INTEGER` column silently accepted either.
+- `POSTGRES_SCHEMA` (a Postgres-dialect twin of `SQLITE_SCHEMA`) lets
+  `init_db()`/`reset_db()` behave the same on both backends;
+  `SUPABASE_SCHEMA.sql` is the same DDL as a standalone file to paste into
+  Supabase's SQL Editor directly.
+
+**Verification honesty**: the SQLite path was re-run through the full
+existing test suite (709 tests, 14 suites, all passing) after this change.
+The Postgres path could **not** be exercised against a live database in
+this environment - the configured Supabase host failed to resolve via DNS
+from this machine, a network/provisioning issue independent of this code
+change, most likely because a Supabase *direct connection* hostname is
+IPv6-only and this network path lacks outbound IPv6 (the fix is to use
+Supabase's connection pooler string instead, which is dual-stack). Tests
+were also hardened so no suite can accidentally pick up a real
+`DATABASE_URL` from `.env` - every test file that imports `index.py` now
+force-clears it before import.
+
 ## Why two layers (not one Postgres migration today)
 
 `ARCHITECTURE_AUDIT.md` section 4 records the user's decision: stay on

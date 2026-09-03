@@ -49,11 +49,13 @@ def create_doctor(email, password, display_name, path=None):
         raise ValueError("An account with that email already exists.")
 
     cur = conn.execute(
-        "INSERT INTO doctors (email, password_hash, display_name, created_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO doctors (email, password_hash, display_name, created_at) "
+        "VALUES (?, ?, ?, ?) RETURNING id",
         (email, generate_password_hash(password), display_name.strip(), utc_now_iso()),
     )
+    new_id = cur.fetchone()["id"]
     conn.commit()
-    return cur.lastrowid
+    return new_id
 
 
 def verify_credentials(email, password, path=None):

@@ -8,6 +8,9 @@ import base64
 # Isolate the test database before importing the app (index.py creates the
 # schema on import).
 os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_app.db')
+# Tests must never touch a real Postgres/Supabase instance, even if
+# DATABASE_URL is set in the real environment/.env for production use.
+os.environ['DATABASE_URL'] = ''
 if os.path.exists(os.environ['DATABASE_PATH']):
     os.remove(os.environ['DATABASE_PATH'])
 # Without this, index.py's load_dotenv() picks up the real STUDY_STORE_PATH

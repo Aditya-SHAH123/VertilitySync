@@ -14,6 +14,9 @@ import sys
 # Isolate both databases before importing the app - index.py creates both
 # schemas on import.
 os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_measurements.db')
+# Tests must never touch a real Postgres/Supabase instance, even if
+# DATABASE_URL is set in the real environment/.env for production use.
+os.environ['DATABASE_URL'] = ''
 os.environ.setdefault('IMAGING_DATABASE_URL', 'sqlite:////tmp/imaging_test_measurements.db')
 # Without this, index.py's load_dotenv() picks up the real STUDY_STORE_PATH
 # from .env (./instance/studies) and this suite's synthetic fixtures land in

@@ -7,3 +7,4 @@ Pillow
 scipy
 scikit-image
 SQLAlchemy
+psycopg2-binary

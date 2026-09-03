@@ -43,16 +43,24 @@ def create_patient(doctor_id, first_name, last_name, date_of_birth=None, sex=Non
         cur = conn.execute(
             "INSERT INTO patients (doctor_id, first_name, last_name, date_of_birth, sex, "
             "internal_patient_id, medical_record_number, created_at, updated_at, archived) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
             (doctor_id, first_name, last_name, date_of_birth, sex, internal_id,
-             (medical_record_number or "").strip() or None, now, now),
+             (medical_record_number or "").strip() or None, now, now, False),
         )
-    except Exception as exc:  # sqlite3.IntegrityError - unique (doctor_id, internal_patient_id)
-        if "UNIQUE" in str(exc):
+    except Exception as exc:
+        # Unique-constraint violation on (doctor_id, internal_patient_id).
+        # "unique" appears in both sqlite3's "UNIQUE constraint failed" and
+        # psycopg2's "duplicate key value violates unique constraint".
+        # Postgres also requires the failed transaction rolled back before
+        # this (cached, per-thread) connection can run another query.
+        if conn.dialect == "postgres":
+            conn.rollback()
+        if "unique" in str(exc).lower():
             raise ValueError(f"You already have a patient with ID {internal_id!r}.") from exc
         raise
+    new_id = cur.fetchone()["id"]
     conn.commit()
-    return get_patient(cur.lastrowid, path=path)
+    return get_patient(new_id, path=path)
 
 
 def get_patient(patient_id, path=None):
@@ -88,7 +96,7 @@ def update_patient(patient_id, first_name=None, last_name=None, date_of_birth=No
 def archive_patient(patient_id, archived=True, path=None):
     conn = get_db(path)
     conn.execute("UPDATE patients SET archived = ?, updated_at = ? WHERE id = ?",
-                 (1 if archived else 0, utc_now_iso(), patient_id))
+                 (bool(archived), utc_now_iso(), patient_id))
     conn.commit()
 
 
@@ -99,7 +107,8 @@ def search_patients(doctor_id, q=None, include_archived=False, path=None):
     sql = "SELECT * FROM patients WHERE doctor_id = ?"
     params = [doctor_id]
     if not include_archived:
-        sql += " AND archived = 0"
+        sql += " AND archived = ?"
+        params.append(False)
     if q:
         like = f"%{q.strip()}%"
         sql += (" AND (first_name LIKE ? OR last_name LIKE ? OR "
@@ -222,12 +231,13 @@ def create_note(doctor_id, patient_id, content, title=None, study_id=None,
     cur = conn.execute(
         "INSERT INTO clinical_notes (doctor_id, patient_id, study_id, title, "
         "original_content, current_content, ai_rewritten, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
         (doctor_id, patient_id, study_id, (title or "").strip() or None,
-         original, content, 1 if ai_rewritten else 0, now, now),
+         original, content, bool(ai_rewritten), now, now),
     )
+    new_id = cur.fetchone()["id"]
     conn.commit()
-    return get_note(cur.lastrowid, path=path)
+    return get_note(new_id, path=path)
 
 
 def get_note(note_id, path=None):
@@ -246,7 +256,7 @@ def update_note_content(note_id, current_content, ai_rewritten=False, path=None)
     conn = get_db(path)
     conn.execute(
         "UPDATE clinical_notes SET current_content = ?, ai_rewritten = ?, updated_at = ? WHERE id = ?",
-        (current_content, 1 if ai_rewritten else 0, utc_now_iso(), note_id),
+        (current_content, bool(ai_rewritten), utc_now_iso(), note_id),
     )
     conn.commit()
     return get_note(note_id, path=path)

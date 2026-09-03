@@ -40,10 +40,10 @@ def create_case(owner_doctor_id, title, status="needs_review", is_demo=False,
     case_ref = generate_case_ref()
     cur = conn.execute(
         "INSERT INTO cases (case_ref, owner_doctor_id, title, status, is_demo, study_id, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (case_ref, owner_doctor_id, title, status, 1 if is_demo else 0, study_id, now, now),
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (case_ref, owner_doctor_id, title, status, bool(is_demo), study_id, now, now),
     )
-    case_id = cur.lastrowid
+    case_id = cur.fetchone()["id"]
     # The owner's access is an explicit grant row, so authorization has a
     # single uniform code path (see auth.doctor_can_access_case).
     conn.execute(
@@ -56,10 +56,17 @@ def create_case(owner_doctor_id, title, status="needs_review", is_demo=False,
 
 def grant_access(case_id, doctor_id, role="viewer", path=None):
     conn = get_db(path)
-    conn.execute(
-        "INSERT OR REPLACE INTO case_access (case_id, doctor_id, role, granted_at) VALUES (?, ?, ?, ?)",
-        (case_id, doctor_id, role, utc_now_iso()),
-    )
+    if conn.dialect == "postgres":
+        conn.execute(
+            "INSERT INTO case_access (case_id, doctor_id, role, granted_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (case_id, doctor_id) DO UPDATE SET role = EXCLUDED.role, granted_at = EXCLUDED.granted_at",
+            (case_id, doctor_id, role, utc_now_iso()),
+        )
+    else:
+        conn.execute(
+            "INSERT OR REPLACE INTO case_access (case_id, doctor_id, role, granted_at) VALUES (?, ?, ?, ?)",
+            (case_id, doctor_id, role, utc_now_iso()),
+        )
     conn.commit()
 
 
@@ -126,12 +133,13 @@ def add_note(case_id, author_doctor_id, content, path=None):
     now = utc_now_iso()
     cur = conn.execute(
         "INSERT INTO notes (case_id, author_doctor_id, content, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "VALUES (?, ?, ?, ?, ?) RETURNING id",
         (case_id, author_doctor_id, content, now, now),
     )
+    note_id = cur.fetchone()["id"]
     conn.execute("UPDATE cases SET updated_at = ? WHERE id = ?", (now, case_id))
     conn.commit()
-    return cur.lastrowid
+    return note_id
 
 
 def update_note(note_id, content, path=None):

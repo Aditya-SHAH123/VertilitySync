@@ -98,6 +98,40 @@ def login_page():
     return render_template('login.html', next=request.args.get('next', ''))
 
 
+@app.route('/signup', methods=['GET'])
+def signup_page():
+    """Self-service doctor registration. Whatever database backend db.py
+    is pointed at (local SQLite or a Postgres/Supabase DATABASE_URL) is
+    where the account actually gets stored - this page/route doesn't care
+    which, since auth.create_doctor() and db.get_db() already abstract
+    that (see api/db.py's module docstring)."""
+    if authmod.current_doctor() is not None:
+        return redirect(url_for('doctor_home_page'))
+    return render_template('signup.html')
+
+
+@app.route('/api/auth/signup', methods=['POST'])
+def api_signup():
+    """Creates a doctor account and immediately signs them in. Password
+    policy, duplicate-email checking, and hashing are all enforced inside
+    auth.create_doctor() - this route adds no separate validation."""
+    payload = request.get_json(silent=True) or request.form
+    email = (payload.get('email') or '').strip()
+    password = payload.get('password') or ''
+    display_name = (payload.get('display_name') or '').strip()
+
+    try:
+        doctor_id = authmod.create_doctor(email, password, display_name)
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+
+    doctor = authmod.get_doctor(doctor_id)
+    authmod.login_session(doctor)
+    dbmod.record_audit('signup', doctor_id=doctor['id'], ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'display_name': doctor['display_name'],
+                    'redirect': '/home'}), 201
+
+
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
     """Validates credentials server-side and establishes a session."""

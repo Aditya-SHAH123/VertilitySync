@@ -14,6 +14,9 @@ import os
 import sys
 
 os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_auth.db')
+# Tests must never touch a real Postgres/Supabase instance, even if
+# DATABASE_URL is set in the real environment/.env for production use.
+os.environ['DATABASE_URL'] = ''
 if os.path.exists(os.environ['DATABASE_PATH']):
     os.remove(os.environ['DATABASE_PATH'])
 # Without this, index.py's load_dotenv() picks up the real STUDY_STORE_PATH
@@ -78,6 +81,34 @@ def main():
     check('correct credentials verify', authmod.verify_credentials(A_EMAIL, A_PASS) is not None)
     check('wrong password fails', authmod.verify_credentials(A_EMAIL, 'wrong-password-here') is None)
     check('unknown account fails', authmod.verify_credentials('nobody@example.test', A_PASS) is None)
+
+    # ---------------- self-service signup ----------------
+    signup_client = app.test_client()
+    r = signup_client.get('/signup')
+    check('signup page loads anonymously', r.status_code == 200, r.status_code)
+
+    r = signup_client.post('/api/auth/signup', json={
+        'display_name': 'Dr Carol', 'email': 'carol.doctor@example.test',
+        'password': 'carol-long-password-1',
+    })
+    check('signup -> 201', r.status_code == 201, (r.status_code, r.get_json()))
+    check('signup logs the doctor in immediately',
+          signup_client.get('/home').status_code == 200)
+
+    r = app.test_client().post('/api/auth/signup', json={
+        'display_name': 'Dupe', 'email': 'carol.doctor@example.test', 'password': 'another-long-password',
+    })
+    check('signup with a duplicate email -> 400', r.status_code == 400, r.status_code)
+
+    r = app.test_client().post('/api/auth/signup', json={
+        'display_name': 'Dave', 'email': 'dave.doctor@example.test', 'password': 'short',
+    })
+    check('signup with a short password -> 400', r.status_code == 400, r.status_code)
+
+    r = app.test_client().post('/api/auth/signup', json={
+        'display_name': '', 'email': 'eve.doctor@example.test', 'password': 'eve-long-password-1',
+    })
+    check('signup without a display name -> 400', r.status_code == 400, r.status_code)
 
     # ---------------- anonymous access ----------------
     anon = app.test_client()
