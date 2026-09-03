@@ -15,6 +15,10 @@ import sys
 # schemas on import.
 os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_measurements.db')
 os.environ.setdefault('IMAGING_DATABASE_URL', 'sqlite:////tmp/imaging_test_measurements.db')
+# Without this, index.py's load_dotenv() picks up the real STUDY_STORE_PATH
+# from .env (./instance/studies) and this suite's synthetic fixtures land in
+# the real study store instead of an isolated directory.
+os.environ.setdefault('STUDY_STORE_PATH', '/tmp/vitalitysync_test_measurements_studies')
 for _path in ('/tmp/vitalitysync_test_measurements.db', '/tmp/imaging_test_measurements.db'):
     if os.path.exists(_path):
         os.remove(_path)

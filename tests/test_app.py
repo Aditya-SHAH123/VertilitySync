@@ -10,6 +10,11 @@ import base64
 os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_app.db')
 if os.path.exists(os.environ['DATABASE_PATH']):
     os.remove(os.environ['DATABASE_PATH'])
+# Without this, index.py's load_dotenv() picks up the real STUDY_STORE_PATH
+# from .env (./instance/studies) and this suite's synthetic fixtures land in
+# the real study store instead of an isolated directory.
+os.environ.setdefault('STUDY_STORE_PATH', '/tmp/vitalitysync_test_app_studies')
+os.environ.setdefault('IMAGING_DATABASE_URL', 'sqlite:////tmp/vitalitysync_test_app_imaging.db')
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'api'))
 from index import app, STUDIES  # noqa: E402

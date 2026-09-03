@@ -21,6 +21,7 @@ SUITES = [
     'test_models.py',              # imaging-relational ORM models (SQLAlchemy)
     'test_asset_storage.py',       # private asset storage: local disk + mocked S3
     'test_measurements_api.py',    # integration: measurements/annotations/ROI/job endpoints
+    'test_patients.py',            # patient workflow: CRUD, scan history, duplicate detection, notes, AI polish
     'test_auth.py',                # authentication, case/study authorization, audit log
     'test_higgsfield_guard.py',    # marketing-media privacy boundary
     'test_colab_export.py',        # remote-tree grouping into importable archives

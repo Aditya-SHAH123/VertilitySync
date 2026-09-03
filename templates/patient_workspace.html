@@ -1,0 +1,363 @@
+{% extends "clinical_light_base.html" %}
+{% set active = "patients" %}
+{% block title %}{{ patient.full_name }} — VitalitySync{% endblock %}
+{% block content %}
+<style>
+    .p-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+    .p-name { font-size: 1.35rem; font-weight: 650; }
+    .p-sub { font-size: 0.86rem; color: var(--muted); margin-top: 4px; }
+    .p-actions { display: flex; gap: 8px; }
+    .stat-strip { display: flex; gap: 28px; margin: 20px 0 24px; flex-wrap: wrap; }
+    .stat-strip .s .n { font-size: 1.25rem; font-weight: 650; }
+    .stat-strip .s .l { font-size: 0.74rem; color: var(--muted); }
+
+    .scan-group-year { font-size: 0.72rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em;
+                        margin: 18px 0 6px; }
+    .scan-row { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+                padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    .scan-row:last-child { border-bottom: none; }
+    .scan-date { font-weight: 650; font-size: 0.85rem; min-width: 76px; }
+    .scan-meta { font-size: 0.78rem; color: var(--muted); }
+    .scan-title { font-size: 0.87rem; font-weight: 600; }
+
+    .note-card { padding: 14px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+    .note-card:last-child { border-bottom: none; }
+    .note-card:hover { background: #fafafb; }
+    .note-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .note-title { font-weight: 600; font-size: 0.87rem; }
+    .note-scope { font-size: 0.7rem; color: var(--accent); background: var(--accent-soft); border-radius: 100px; padding: 1px 9px; }
+    .note-body { font-size: 0.85rem; color: var(--text); margin-top: 5px; white-space: pre-wrap; }
+    .note-time { font-size: 0.74rem; color: var(--dim); margin-top: 6px; }
+
+    #noteDlg { width: min(560px, 94vw); }
+    #noteDlg textarea { min-height: 130px; resize: vertical; font-size: 0.88rem; line-height: 1.4; }
+    .ai-block { margin-top: 14px; }
+    .ai-block h4 { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 6px; }
+    .ai-text { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px;
+               font-size: 0.86rem; white-space: pre-wrap; line-height: 1.4; }
+    .ai-note { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
+    .upload-status-line { font-size: 0.85rem; color: var(--muted); margin: 10px 0; }
+</style>
+
+<div class="p-head">
+    <div>
+        <div class="p-name">{{ patient.full_name }}</div>
+        <div class="p-sub">{{ patient.internal_patient_id }}
+            {% if patient.sex %} · {{ patient.sex|capitalize }}{% endif %}
+            {% if patient.date_of_birth %} · DOB {{ patient.date_of_birth }}{% endif %}
+        </div>
+    </div>
+    <div class="p-actions">
+        <button class="btn btn-sub" id="uploadBtn">Upload Scan</button>
+        <button class="btn btn-primary" id="addNoteBtn">Add Note</button>
+    </div>
+</div>
+
+<div class="tabs">
+    <button class="on" data-tab="overview">Overview</button>
+    <button data-tab="imaging">Imaging</button>
+    <button data-tab="notes">Notes</button>
+</div>
+
+<div class="tab-panel" id="tab-overview">
+    <div class="stat-strip">
+        <div class="s"><div class="n" id="ovScanCount">—</div><div class="l">Total Scans</div></div>
+        <div class="s"><div class="n" id="ovLastScan">—</div><div class="l">Latest Scan</div></div>
+    </div>
+    <div class="panel" style="padding:16px;">
+        <h3 style="font-size:0.86rem;margin-bottom:10px;">Most Recent Note</h3>
+        <div id="ovRecentNote" style="font-size:0.85rem;color:var(--muted);">Loading…</div>
+    </div>
+</div>
+
+<div class="tab-panel panel" id="tab-imaging" hidden style="padding:4px 0;">
+    <div id="scanHistory"></div>
+</div>
+
+<div class="tab-panel panel" id="tab-notes" hidden>
+    <div id="notesList"></div>
+</div>
+
+<dialog id="uploadDlg">
+    <h2>Upload Scan</h2>
+    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 14px;">Select the DICOM series (individual files or a single .zip).</p>
+    <input type="file" id="uploadFiles" multiple>
+    <div class="upload-status-line" id="uploadStatus"></div>
+    <div class="dlg-actions">
+        <button type="button" class="btn btn-sub" id="cancelUpload">Cancel</button>
+        <button type="button" class="btn btn-primary" id="submitUpload">Upload</button>
+    </div>
+</dialog>
+
+<dialog id="dupDlg">
+    <h2>Scan Already Exists</h2>
+    <p style="font-size:0.87rem;">This scan already exists for this patient.</p>
+    <div class="dlg-actions">
+        <button type="button" class="btn btn-sub" id="dupCancel">Cancel</button>
+        <button type="button" class="btn btn-primary" id="dupOpen">Open Existing Scan</button>
+    </div>
+</dialog>
+
+<dialog id="noteDlg">
+    <h2 id="noteDlgTitle">Note</h2>
+    <div id="noteComposeSection">
+        <label for="noteTitleInput">Title</label>
+        <input type="text" id="noteTitleInput" maxlength="160" placeholder="Optional">
+        <label for="noteContentInput">Note</label>
+        <textarea id="noteContentInput" maxlength="4000"></textarea>
+        <div class="field-error" id="noteError"></div>
+        <div class="dlg-actions" style="justify-content:space-between;">
+            <button type="button" class="btn btn-ghost" id="polishBtn">Polish with AI</button>
+            <div style="display:flex;gap:8px;">
+                <button type="button" class="btn btn-sub" id="cancelNote">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveNote">Save Note</button>
+            </div>
+        </div>
+    </div>
+    <div id="noteReviewSection" hidden>
+        <div class="ai-block">
+            <h4>Original</h4>
+            <div class="ai-text" id="reviewOriginal"></div>
+        </div>
+        <div class="ai-block">
+            <h4>AI Suggestion</h4>
+            <div class="ai-text" id="reviewSuggestion"></div>
+        </div>
+        <div class="ai-note">AI rewriting improves wording only — it never adds findings, measurements, or recommendations.</div>
+        <div class="dlg-actions">
+            <button type="button" class="btn btn-sub" id="keepOriginalBtn">Keep Original</button>
+            <button type="button" class="btn btn-sub" id="editSuggestionBtn">Edit Suggestion</button>
+            <button type="button" class="btn btn-primary" id="useRewriteBtn">Use Rewrite</button>
+        </div>
+    </div>
+</dialog>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+    const patientId = {{ patient.id }};
+    let studies = [];
+    let notes = [];
+    let noteStudyId = null;      // set when the note being composed is scan-specific
+    let originalTypedText = '';  // captured at the moment "Polish with AI" is clicked
+    let pendingDuplicateStudyId = null;
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function fmt(iso) {
+        if (!iso) return '—';
+        try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+        catch (e) { return iso.slice(0, 10); }
+    }
+
+    // ---------------- tabs ----------------
+    document.querySelectorAll('.tabs button').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('on'); });
+            b.classList.add('on');
+            ['overview', 'imaging', 'notes'].forEach(function (t) {
+                document.getElementById('tab-' + t).hidden = (t !== b.getAttribute('data-tab'));
+            });
+        });
+    });
+
+    // ---------------- overview + scan history ----------------
+    async function loadPatient() {
+        const resp = await fetch('/api/patients/' + patientId);
+        if (resp.status === 401) { window.location.href = '/login'; return; }
+        if (resp.status === 404) { document.body.innerHTML = '<p style="padding:40px;">Patient not found.</p>'; return; }
+        const data = await resp.json();
+        studies = data.studies || [];
+        document.getElementById('ovScanCount').textContent = data.patient.study_count || 0;
+        document.getElementById('ovLastScan').textContent = fmt(data.patient.last_scan_at);
+        const recent = (data.recent_notes || [])[0];
+        document.getElementById('ovRecentNote').textContent = recent ? recent.current_content : 'No notes yet.';
+        renderScanHistory();
+    }
+
+    function renderScanHistory() {
+        const el = document.getElementById('scanHistory');
+        if (!studies.length) {
+            el.innerHTML = '<div class="empty"><p>No scans yet</p><p style="font-size:0.8rem;">Upload this patient\'s first CT study.</p>' +
+                '<button class="btn btn-primary" id="emptyUpload">Upload Scan</button></div>';
+            const b = document.getElementById('emptyUpload');
+            if (b) b.addEventListener('click', function () { openUploadDlg(); });
+            return;
+        }
+        let html = '', lastYear = null;
+        studies.forEach(function (s) {
+            const d = s.scan_date || s.created_at;
+            const year = d ? d.slice(0, 4) : '';
+            if (year && year !== lastYear) { html += '<div class="scan-group-year">' + year + '</div>'; lastYear = year; }
+            const ready = s.processing_status === 'ready';
+            html += '<div class="scan-row" data-study="' + esc(s.id) + '">' +
+                '<div style="display:flex;align-items:center;gap:16px;">' +
+                '<div class="scan-date">' + (d ? fmt(d) : '—') + '</div>' +
+                '<div><div class="scan-title">' + esc(s.modality || 'CT') + '</div>' +
+                '<div class="scan-meta">' + (s.slice_count || '—') + ' slices' +
+                (ready ? ' · <span class="pill ready">3D Ready</span>' : '') + '</div></div></div>' +
+                '<button class="btn btn-sub" data-open="' + esc(s.id) + '">Open</button>' +
+                '</div>';
+        });
+        el.innerHTML = html;
+        el.querySelectorAll('[data-open]').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                window.location.href = '/viewer/' + btn.getAttribute('data-open');
+            });
+        });
+    }
+
+    // ---------------- notes ----------------
+    async function loadNotes() {
+        const resp = await fetch('/api/patients/' + patientId + '/notes');
+        const data = await resp.json();
+        notes = data.notes || [];
+        renderNotes();
+    }
+
+    function renderNotes() {
+        const el = document.getElementById('notesList');
+        if (!notes.length) {
+            el.innerHTML = '<div class="empty"><p>No notes yet.</p></div>';
+            return;
+        }
+        el.innerHTML = notes.map(function (n) {
+            return '<div class="note-card" data-id="' + n.id + '">' +
+                '<div class="note-title-row"><span class="note-title">' + esc(n.title || 'Untitled note') + '</span>' +
+                '<span class="note-scope">' + (n.study_id ? 'Scan note' : 'General') + '</span></div>' +
+                '<div class="note-body">' + esc(n.current_content) + '</div>' +
+                '<div class="note-time">' + fmt(n.updated_at) + (n.ai_rewritten ? ' · AI-polished' : '') + '</div>' +
+                '</div>';
+        }).join('');
+    }
+
+    // ---------------- upload ----------------
+    const uploadDlg = document.getElementById('uploadDlg');
+    function openUploadDlg() {
+        document.getElementById('uploadStatus').textContent = '';
+        document.getElementById('uploadFiles').value = '';
+        uploadDlg.showModal();
+    }
+    document.getElementById('uploadBtn').addEventListener('click', openUploadDlg);
+    document.getElementById('cancelUpload').addEventListener('click', function () { uploadDlg.close(); });
+    document.getElementById('submitUpload').addEventListener('click', async function () {
+        const files = document.getElementById('uploadFiles').files;
+        const statusEl = document.getElementById('uploadStatus');
+        if (!files.length) { statusEl.textContent = 'Choose at least one file.'; return; }
+        const fd = new FormData();
+        for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
+        fd.append('patient_id', String(patientId));
+
+        statusEl.textContent = 'Uploading…';
+        const resp = await fetch('/api/dicom/upload', { method: 'POST', body: fd });
+        const data = await resp.json();
+
+        if (resp.status === 409 && data.status === 'DUPLICATE') {
+            uploadDlg.close();
+            pendingDuplicateStudyId = data.existing_study_id;
+            document.getElementById('dupDlg').showModal();
+            return;
+        }
+        if (!resp.ok) { statusEl.textContent = data.message || 'Upload failed.'; return; }
+        statusEl.textContent = 'Ready.';
+        window.location.href = '/viewer/' + data.study_id;
+    });
+    document.getElementById('dupCancel').addEventListener('click', function () { document.getElementById('dupDlg').close(); });
+    document.getElementById('dupOpen').addEventListener('click', function () {
+        if (pendingDuplicateStudyId) window.location.href = '/viewer/' + pendingDuplicateStudyId;
+    });
+
+    // ---------------- note editor (shared by "Add Note" and scan notes) ----------------
+    const noteDlg = document.getElementById('noteDlg');
+    const composeSection = document.getElementById('noteComposeSection');
+    const reviewSection = document.getElementById('noteReviewSection');
+
+    function openNoteDlg(studyId) {
+        noteStudyId = studyId || null;
+        document.getElementById('noteDlgTitle').textContent = studyId ? 'Scan Note' : 'Patient Note';
+        document.getElementById('noteTitleInput').value = '';
+        document.getElementById('noteContentInput').value = '';
+        document.getElementById('noteError').textContent = '';
+        composeSection.hidden = false;
+        reviewSection.hidden = true;
+        noteDlg.showModal();
+    }
+    document.getElementById('addNoteBtn').addEventListener('click', function () { openNoteDlg(null); });
+    document.getElementById('cancelNote').addEventListener('click', function () { noteDlg.close(); });
+
+    document.getElementById('polishBtn').addEventListener('click', async function () {
+        const text = document.getElementById('noteContentInput').value.trim();
+        const errEl = document.getElementById('noteError');
+        if (!text) { errEl.textContent = 'Write a note first.'; return; }
+        errEl.textContent = '';
+        originalTypedText = text;
+        const btn = this;
+        btn.disabled = true; btn.textContent = 'Polishing…';
+        try {
+            const resp = await fetch('/api/notes/polish', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text }),
+            });
+            const data = await resp.json();
+            if (data.status !== 'OK') {
+                errEl.textContent = data.message || 'AI rewriting is not configured.';
+                return;
+            }
+            document.getElementById('reviewOriginal').textContent = originalTypedText;
+            document.getElementById('reviewSuggestion').textContent = data.suggestion;
+            composeSection.hidden = true;
+            reviewSection.hidden = false;
+        } finally {
+            btn.disabled = false; btn.textContent = 'Polish with AI';
+        }
+    });
+
+    document.getElementById('keepOriginalBtn').addEventListener('click', function () {
+        composeSection.hidden = false; reviewSection.hidden = true;
+    });
+    document.getElementById('editSuggestionBtn').addEventListener('click', function () {
+        document.getElementById('noteContentInput').value = document.getElementById('reviewSuggestion').textContent;
+        composeSection.hidden = false; reviewSection.hidden = true;
+    });
+    document.getElementById('useRewriteBtn').addEventListener('click', function () {
+        document.getElementById('noteContentInput').value = document.getElementById('reviewSuggestion').textContent;
+        document.getElementById('noteContentInput').dataset.aiRewritten = '1';
+        document.getElementById('noteContentInput').dataset.originalTyped = originalTypedText;
+        composeSection.hidden = false; reviewSection.hidden = true;
+    });
+
+    document.getElementById('saveNote').addEventListener('click', async function () {
+        const contentEl = document.getElementById('noteContentInput');
+        const content = contentEl.value.trim();
+        const errEl = document.getElementById('noteError');
+        if (!content) { errEl.textContent = 'Note cannot be empty.'; return; }
+        const aiRewritten = contentEl.dataset.aiRewritten === '1';
+        const resp = await fetch('/api/patients/' + patientId + '/notes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                title: document.getElementById('noteTitleInput').value.trim() || null,
+                content: content,
+                study_id: noteStudyId,
+                ai_rewritten: aiRewritten,
+                original_content: aiRewritten ? contentEl.dataset.originalTyped : null,
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { errEl.textContent = data.message || 'Could not save note.'; return; }
+        delete contentEl.dataset.aiRewritten;
+        delete contentEl.dataset.originalTyped;
+        noteDlg.close();
+        loadNotes();
+        loadPatient();
+    });
+
+    loadPatient();
+    loadNotes();
+})();
+</script>
+{% endblock %}

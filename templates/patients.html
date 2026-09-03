@@ -1,0 +1,137 @@
+{% extends "clinical_light_base.html" %}
+{% set active = "patients" %}
+{% block title %}Patients — VitalitySync{% endblock %}
+{% block content %}
+<style>
+    .patient-name { font-weight: 600; }
+    .patient-sub { font-size: 0.78rem; color: var(--muted); margin-top: 1px; }
+</style>
+
+<div class="topline">
+    <h1 style="font-size:1.15rem;font-weight:650;">Patients</h1>
+    <button class="btn btn-primary" id="newPatientBtn">Add Patient</button>
+</div>
+
+<div class="topline" style="margin-bottom:14px;">
+    <div class="search-box"><input type="search" id="searchInput" placeholder="Search patients by name, ID, or MRN…"></div>
+</div>
+
+<div class="panel" id="tableWrap"></div>
+
+<dialog id="newPatientDlg">
+    <h2>Add Patient</h2>
+    <form method="dialog">
+        <label for="pFirst">First name</label>
+        <input type="text" id="pFirst" required maxlength="80">
+        <label for="pLast">Last name</label>
+        <input type="text" id="pLast" required maxlength="80">
+        <label for="pDob">Date of birth</label>
+        <input type="date" id="pDob">
+        <label for="pSex">Sex</label>
+        <select id="pSex">
+            <option value="">Unspecified</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="other">Other</option>
+        </select>
+        <label for="pMrn">Medical record number (optional)</label>
+        <input type="text" id="pMrn" maxlength="64">
+        <div class="field-error" id="pError"></div>
+        <div class="dlg-actions">
+            <button type="button" class="btn btn-sub" id="cancelPatient">Cancel</button>
+            <button type="button" class="btn btn-primary" id="createPatient">Create</button>
+        </div>
+    </form>
+</dialog>
+
+{% endblock %}
+{% block extra_scripts %}
+<script>
+(function () {
+    const tableWrap = document.getElementById('tableWrap');
+    const searchInput = document.getElementById('searchInput');
+    const dlg = document.getElementById('newPatientDlg');
+    let q = '';
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+    function fmtDate(iso) {
+        if (!iso) return 'None yet';
+        try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }); }
+        catch (e) { return iso.slice(0, 10); }
+    }
+
+    async function load() {
+        const params = new URLSearchParams();
+        if (q) params.set('q', q);
+        const resp = await fetch('/api/patients?' + params.toString());
+        if (resp.status === 401) { window.location.href = '/login'; return; }
+        const data = await resp.json();
+        render(data.patients || []);
+    }
+
+    function render(patients) {
+        if (!patients.length) {
+            tableWrap.innerHTML = '<div class="empty"><p>' +
+                (q ? 'No patients match that search.' : 'No patients yet.') +
+                '</p><button class="btn btn-primary" id="emptyNew">Add your first patient</button></div>';
+            const b = document.getElementById('emptyNew');
+            if (b) b.addEventListener('click', function () { dlg.showModal(); });
+            return;
+        }
+        tableWrap.innerHTML =
+            '<table><thead><tr><th>Patient</th><th>Last Scan</th><th>Scans</th></tr></thead><tbody>' +
+            patients.map(function (p) {
+                return '<tr data-id="' + p.id + '">' +
+                    '<td><div class="patient-name">' + esc(p.full_name) + '</div>' +
+                    '<div class="patient-sub">' + esc(p.internal_patient_id) + '</div></td>' +
+                    '<td>' + fmtDate(p.last_scan_at) + '</td>' +
+                    '<td>' + (p.study_count || 0) + '</td>' +
+                    '</tr>';
+            }).join('') + '</tbody></table>';
+
+        tableWrap.querySelectorAll('tbody tr').forEach(function (tr) {
+            tr.addEventListener('click', function () {
+                window.location.href = '/patients/' + tr.getAttribute('data-id');
+            });
+        });
+    }
+
+    let searchTimer = null;
+    searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () { q = searchInput.value.trim(); load(); }, 200);
+    });
+
+    document.getElementById('newPatientBtn').addEventListener('click', function () {
+        document.getElementById('pError').textContent = '';
+        dlg.showModal();
+    });
+    document.getElementById('cancelPatient').addEventListener('click', function () { dlg.close(); });
+    document.getElementById('createPatient').addEventListener('click', async function () {
+        const first = document.getElementById('pFirst').value.trim();
+        const last = document.getElementById('pLast').value.trim();
+        const errEl = document.getElementById('pError');
+        if (!first || !last) { errEl.textContent = 'First and last name are required.'; return; }
+        const resp = await fetch('/api/patients', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                first_name: first, last_name: last,
+                date_of_birth: document.getElementById('pDob').value || null,
+                sex: document.getElementById('pSex').value || null,
+                medical_record_number: document.getElementById('pMrn').value || null,
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { errEl.textContent = data.message || 'Could not create patient.'; return; }
+        dlg.close();
+        window.location.href = '/patients/' + data.patient.id;
+    });
+
+    load();
+})();
+</script>
+{% endblock %}

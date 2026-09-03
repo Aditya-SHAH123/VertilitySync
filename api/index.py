@@ -33,6 +33,8 @@ from quantitative_analysis import analyze_study  # noqa: E402
 from overlay_render import render_overlay_png, band_profile, OVERLAY_BANDS  # noqa: E402
 import db_engine as dbengine     # noqa: E402
 import measurements as measmod   # noqa: E402
+import patients as patientsmod   # noqa: E402
+import ai_notes                  # noqa: E402
 
 # Initialize Flask app
 # The template folder is pointed to the root /templates directory
@@ -92,7 +94,7 @@ def login_page():
     """Clean doctor sign-in page. Deliberately carries none of the public
     site's cinematic media."""
     if authmod.current_doctor() is not None:
-        return redirect(url_for('cases_page'))
+        return redirect(url_for('doctor_home_page'))
     return render_template('login.html', next=request.args.get('next', ''))
 
 
@@ -113,7 +115,7 @@ def api_login():
     authmod.login_session(doctor)
     dbmod.record_audit('login', doctor_id=doctor['id'], ip=authmod.client_ip())
     return jsonify({'status': 'OK', 'display_name': doctor['display_name'],
-                    'redirect': '/cases'}), 200
+                    'redirect': '/home'}), 200
 
 
 @app.route('/api/auth/logout', methods=['POST'])
@@ -174,6 +176,74 @@ def dashboard():
     return render_template('dashboard.html', doctor_name=doctor['display_name'])
 
 
+def _get_owned_patient_or_error(patient_id):
+    """Resolves a patient id to a row the signed-in doctor owns. Same
+    anti-enumeration convention as _get_owned_study_or_error: a patient
+    belonging to another doctor returns the same 404 as a missing one."""
+    doctor = authmod.current_doctor()
+    patient = patientsmod.get_patient(patient_id)
+    if patient is None or not authmod.doctor_can_access_patient(doctor['id'], patient):
+        if patient is not None:
+            dbmod.record_audit('patient_access_denied', doctor_id=doctor['id'],
+                                target_type='patient', target_id=patient_id,
+                                outcome='denied', ip=authmod.client_ip())
+        return None, (jsonify({'status': 'NOT_FOUND', 'message': 'Patient not found.'}), 404)
+    return patient, None
+
+
+@app.route('/home')
+@authmod.login_required
+def doctor_home_page():
+    """Doctor landing page after sign-in: greeting, a few real counts, and
+    fast links back into recently active patients/imaging - not a page of
+    decorative statistics."""
+    doctor = authmod.current_doctor()
+    patients = patientsmod.search_patients(doctor['id'])
+    all_studies = []
+    for p in patients:
+        for s in patientsmod.list_studies_for_patient(p['id']):
+            all_studies.append((p, s))
+    all_studies.sort(key=lambda ps: ps[1]['created_at'], reverse=True)
+
+    recent_patients = [{
+        'id': p['id'], 'name': f"{p['first_name']} {p['last_name']}",
+        'internal_patient_id': p['internal_patient_id'],
+        'last_scan_at': next((s['created_at'] for pp, s in all_studies if pp['id'] == p['id']), None),
+    } for p in patients[:5]]
+
+    recent_imaging = [{
+        'study_id': s['id'], 'patient_id': p['id'],
+        'patient_name': f"{p['first_name']} {p['last_name']}",
+        'modality': s['modality'] or 'CT', 'created_at': s['created_at'],
+    } for p, s in all_studies[:5]]
+
+    return render_template('home.html', doctor_name=doctor['display_name'],
+                            patient_count=len(patients),
+                            recent_scan_count=len(all_studies),
+                            recent_patients=recent_patients,
+                            recent_imaging=recent_imaging)
+
+
+@app.route('/patients')
+@authmod.login_required
+def patients_page():
+    doctor = authmod.current_doctor()
+    return render_template('patients.html', doctor_name=doctor['display_name'])
+
+
+@app.route('/patients/<int:patient_id>')
+@authmod.login_required
+def patient_workspace_page(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        abort(404)
+    doctor = authmod.current_doctor()
+    dbmod.record_audit('patient_opened', doctor_id=doctor['id'],
+                        target_type='patient', target_id=patient_id, ip=authmod.client_ip())
+    return render_template('patient_workspace.html', doctor_name=doctor['display_name'],
+                            patient=patientsmod.patient_to_dict(patient))
+
+
 @app.route('/viewer/<study_id>')
 @authmod.login_required
 def viewer(study_id):
@@ -194,8 +264,21 @@ def viewer(study_id):
     if study is not None:
         dbmod.record_audit('imaging_study_opened', doctor_id=doctor['id'],
                             target_type='study', target_id=study_id, ip=authmod.client_ip())
+
+    # Optional patient linkage: a study uploaded through the patient
+    # workflow (see /api/dicom/upload's patient_id form field) has a
+    # patient_studies row; one imported the old way (no patient attached)
+    # does not, and the viewer's notes panel simply stays hidden for it.
+    study_record = patientsmod.get_study_record(study_id)
+    patient_for_study = None
+    if study_record is not None:
+        patient_row = patientsmod.get_patient(study_record['patient_id'])
+        if patient_row is not None and authmod.doctor_can_access_patient(doctor['id'], patient_row):
+            patient_for_study = patientsmod.patient_to_dict(patient_row)
+
     return render_template('viewer.html', study_id=study_id,
-                            doctor_name=doctor['display_name'])
+                            doctor_name=doctor['display_name'],
+                            patient_for_study=patient_for_study)
 
 
 # ---------------------------------------------------------------------------
@@ -859,6 +942,31 @@ def upload_dicom_series():
     ordered_entries, fallback_used, fallback_method, slice_positions, order_warnings = \
         order_slices_spatially(good_entries)
 
+    # Duplicate-scan check: happens BEFORE the expensive volume/HU/segmentation
+    # work, using DICOM identifiers plus a content hash of the raw pixel data
+    # (never filenames). Only runs when the upload is attached to a patient -
+    # the older, patient-less upload flow (case-linked or standalone) is
+    # unaffected.
+    patient_id_raw = request.form.get('patient_id')
+    target_patient = None
+    study_instance_uid = str(_get(ordered_entries[0]['ds'], 'StudyInstanceUID') or '') or None
+    series_instance_uid = str(_get(ordered_entries[0]['ds'], 'SeriesInstanceUID') or '') or None
+    scan_hash = patientsmod.compute_scan_hash(ordered_entries)
+    if patient_id_raw:
+        try:
+            target_patient, perr = _get_owned_patient_or_error(int(patient_id_raw))
+        except (TypeError, ValueError):
+            return jsonify({'status': 'FAIL', 'message': 'patient_id must be an integer.'}), 400
+        if perr:
+            return perr
+        dup = patientsmod.find_duplicate_study(target_patient['id'], study_instance_uid, scan_hash)
+        if dup is not None:
+            return jsonify({
+                'status': 'DUPLICATE',
+                'message': 'This scan already exists for this patient.',
+                'existing_study_id': dup['id'],
+            }), 409
+
     volume = build_volume(ordered_entries)
     # The per-slice pixel data is now duplicated inside `volume`; release it
     # before allocating anything else (see _release_slice_pixel_data).
@@ -947,6 +1055,27 @@ def upload_dicom_series():
                             target_type='study', target_id=study_id, outcome='failed',
                             ip=authmod.client_ip())
 
+    # Patient scan-history record. Runs after the study is durably saved, so
+    # a failure here never leaves an orphaned/half-saved study; a failure to
+    # index it just means it won't show up in the patient's scan history yet.
+    if target_patient is not None:
+        study_date_raw = _get(ordered_entries[0]['ds'], 'StudyDate')
+        scan_date = None
+        if study_date_raw and len(str(study_date_raw)) == 8:
+            d = str(study_date_raw)
+            scan_date = f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
+        try:
+            patientsmod.add_study_record(
+                study_id, target_patient['id'], doctor['id'], scan_hash,
+                study_instance_uid=study_instance_uid, series_instance_uid=series_instance_uid,
+                modality=summary.get('scanner_metadata', {}).get('Modality'),
+                scan_date=scan_date, slice_count=hu_volume.shape[0],
+            )
+        except Exception:  # noqa: BLE001 - the study itself already saved successfully
+            dbmod.record_audit('patient_study_index_failed', doctor_id=doctor['id'],
+                                target_type='study', target_id=study_id, outcome='failed',
+                                ip=authmod.client_ip())
+
     return jsonify({
         'status': 'PASS' if series_result['status'] == 'PASS' else 'WARNING',
         'study_id': study_id,
@@ -954,6 +1083,7 @@ def upload_dicom_series():
         'series_result': series_result,
         'summary': summary,
         'archive_notes': archive_notes,
+        'patient_id': target_patient['id'] if target_patient is not None else None,
     }), 200
 
 
@@ -1660,6 +1790,188 @@ def get_volume_texture(study_id):
         'warning': warning,
         'data_b64': encode_typed_array(clipped, np.int16),
     })
+
+
+# ---------------------------------------------------------------------------
+# PATIENT WORKFLOW API: patients, scan history, notes, AI note polishing
+# ---------------------------------------------------------------------------
+# Every endpoint below re-verifies patient ownership server-side via
+# _get_owned_patient_or_error - a patient id changed in the URL to one that
+# belongs to another doctor gets the same 404 as a nonexistent one.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/patients', methods=['GET'])
+@authmod.api_login_required
+def api_list_patients():
+    doctor = authmod.current_doctor()
+    q = request.args.get('q')
+    rows = patientsmod.search_patients(doctor['id'], q=q)
+    out = []
+    for r in rows:
+        studies = patientsmod.list_studies_for_patient(r['id'])
+        last_scan = studies[0]['created_at'] if studies else None
+        out.append(patientsmod.patient_to_dict(r, study_count=len(studies), last_scan_at=last_scan))
+    return jsonify({'status': 'OK', 'patients': out})
+
+
+@app.route('/api/patients', methods=['POST'])
+@authmod.api_login_required
+def api_create_patient():
+    doctor = authmod.current_doctor()
+    data = request.get_json(silent=True) or {}
+    try:
+        patient = patientsmod.create_patient(
+            doctor['id'], data.get('first_name'), data.get('last_name'),
+            date_of_birth=data.get('date_of_birth'), sex=data.get('sex'),
+            internal_patient_id=data.get('internal_patient_id'),
+            medical_record_number=data.get('medical_record_number'),
+        )
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    dbmod.record_audit('patient_created', doctor_id=doctor['id'],
+                        target_type='patient', target_id=patient['id'], ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'patient': patientsmod.patient_to_dict(patient)}), 201
+
+
+@app.route('/api/patients/<int:patient_id>', methods=['GET'])
+@authmod.api_login_required
+def api_get_patient(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    studies = patientsmod.list_studies_for_patient(patient_id)
+    notes = patientsmod.list_notes(patient_id)
+    return jsonify({
+        'status': 'OK',
+        'patient': patientsmod.patient_to_dict(
+            patient, study_count=len(studies),
+            last_scan_at=studies[0]['created_at'] if studies else None),
+        'studies': [patientsmod.study_to_dict(s) for s in studies],
+        'recent_notes': [patientsmod.note_to_dict(n) for n in notes[:5]],
+    })
+
+
+@app.route('/api/patients/<int:patient_id>', methods=['PUT'])
+@authmod.api_login_required
+def api_update_patient(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = patientsmod.update_patient(
+            patient_id, first_name=data.get('first_name'), last_name=data.get('last_name'),
+            date_of_birth=data.get('date_of_birth'), sex=data.get('sex'),
+            medical_record_number=data.get('medical_record_number'))
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    return jsonify({'status': 'OK', 'patient': patientsmod.patient_to_dict(updated)})
+
+
+@app.route('/api/patients/<int:patient_id>/archive', methods=['POST'])
+@authmod.api_login_required
+def api_archive_patient(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    archived = bool((request.get_json(silent=True) or {}).get('archived', True))
+    patientsmod.archive_patient(patient_id, archived=archived)
+    doctor = authmod.current_doctor()
+    dbmod.record_audit('patient_archived' if archived else 'patient_unarchived',
+                        doctor_id=doctor['id'], target_type='patient', target_id=patient_id,
+                        ip=authmod.client_ip())
+    return jsonify({'status': 'OK'})
+
+
+@app.route('/api/patients/<int:patient_id>/studies', methods=['GET'])
+@authmod.api_login_required
+def api_list_patient_studies(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    studies = patientsmod.list_studies_for_patient(patient_id)
+    return jsonify({'status': 'OK', 'studies': [patientsmod.study_to_dict(s) for s in studies]})
+
+
+@app.route('/api/patients/<int:patient_id>/notes', methods=['GET'])
+@authmod.api_login_required
+def api_list_patient_notes(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    study_id = request.args.get('study_id')
+    notes = patientsmod.list_notes(patient_id, study_id=study_id if study_id else None)
+    return jsonify({'status': 'OK', 'notes': [patientsmod.note_to_dict(n) for n in notes]})
+
+
+@app.route('/api/patients/<int:patient_id>/notes', methods=['POST'])
+@authmod.api_login_required
+def api_create_patient_note(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    doctor = authmod.current_doctor()
+    data = request.get_json(silent=True) or {}
+    study_id = data.get('study_id') or None
+    if study_id is not None:
+        study_record = patientsmod.get_study_record(study_id)
+        if study_record is None or study_record['patient_id'] != patient_id:
+            return jsonify({'status': 'FAIL', 'message': 'study_id does not belong to this patient.'}), 400
+    try:
+        note = patientsmod.create_note(
+            doctor['id'], patient_id, data.get('content'), title=data.get('title'),
+            study_id=study_id, original_content=data.get('original_content'),
+            ai_rewritten=bool(data.get('ai_rewritten', False)))
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    dbmod.record_audit('note_created', doctor_id=doctor['id'],
+                        target_type='patient', target_id=patient_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'note': patientsmod.note_to_dict(note)}), 201
+
+
+def _get_owned_note_or_error(note_id):
+    """A note's authorization is derived from its patient's ownership -
+    there is no separate note-level grant."""
+    doctor = authmod.current_doctor()
+    note = patientsmod.get_note(note_id)
+    if note is None:
+        return None, (jsonify({'status': 'NOT_FOUND'}), 404)
+    patient = patientsmod.get_patient(note['patient_id'])
+    if not authmod.doctor_can_access_patient(doctor['id'], patient):
+        return None, (jsonify({'status': 'NOT_FOUND'}), 404)
+    return note, None
+
+
+@app.route('/api/notes/<int:note_id>', methods=['PUT'])
+@authmod.api_login_required
+def api_update_note(note_id):
+    """Updates current_content only - original_content is permanent. Used
+    both for a plain manual edit and for accepting an AI rewrite (pass
+    ai_rewritten: true in the latter case)."""
+    note, err = _get_owned_note_or_error(note_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = patientsmod.update_note_content(
+            note_id, data.get('content'), ai_rewritten=bool(data.get('ai_rewritten', False)))
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    doctor = authmod.current_doctor()
+    dbmod.record_audit('note_updated', doctor_id=doctor['id'],
+                        target_type='note', target_id=note_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'note': patientsmod.note_to_dict(updated)})
+
+
+@app.route('/api/notes/polish', methods=['POST'])
+@authmod.api_login_required
+def api_polish_note():
+    """Sends ONLY the note text to the AI provider - never a study id, a
+    patient id, or any imaging data. Returns a suggestion; it never writes
+    to the database. A doctor accepts it via PUT /api/notes/<id> separately."""
+    data = request.get_json(silent=True) or {}
+    result = ai_notes.polish_note(data.get('text'))
+    return jsonify(result), (200 if result['status'] == 'OK' else 422)
 
 
 # ---------------------------------------------------------------------------

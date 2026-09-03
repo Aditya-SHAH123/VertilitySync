@@ -64,6 +64,14 @@
         .slider-row .idx-label { font-size: 0.75rem; color: #94a3b8; min-width: 52px; text-align: right; }
 
         .info-bar { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 24px; background: #1e293b; border-radius: 10px; padding: 14px 18px; }
+        .notes-panel { margin-top: 18px; background: #1e293b; border-radius: 10px; padding: 16px 18px; }
+        .notes-panel h3 { margin: 0 0 12px; font-size: 0.85rem; color: #f1f5f9; display: flex; align-items: center; justify-content: space-between; }
+        .note-item { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; font-size: 0.84rem; white-space: pre-wrap; }
+        .note-item .note-time { font-size: 0.72rem; color: #64748b; margin-top: 6px; }
+        .notes-panel textarea { width: 100%; min-height: 80px; background: #0f172a; border: 1px solid #334155; color: #e2e8f0;
+                                 border-radius: 6px; padding: 8px 10px; font-size: 0.84rem; font-family: inherit; resize: vertical; margin-bottom: 8px; }
+        .notes-panel .ai-text { background: #0f172a; border: 1px solid #334155; border-radius: 6px; padding: 10px 12px; font-size: 0.84rem; white-space: pre-wrap; margin-bottom: 8px; }
+        .notes-panel .row-actions { display: flex; gap: 8px; }
         .info-item .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #94a3b8; }
         .info-item .value { font-size: 1rem; font-weight: 700; color: #f1f5f9; }
 
@@ -427,6 +435,35 @@
                     <button class="future-btn" disabled title="Not yet implemented">Abnormality Probability</button>
                 </div>
             </div>
+
+            {% if patient_for_study %}
+            <div class="notes-panel" id="scanNotesPanel">
+                <h3>Scan Notes — {{ patient_for_study.full_name }}
+                    <button class="small-btn" id="scanNoteAddBtn">Add Note</button>
+                </h3>
+                <div id="scanNotesList" style="font-size:0.82rem;color:#94a3b8;">Loading…</div>
+                <div id="scanNoteCompose" style="display:none;margin-top:10px;">
+                    <textarea id="scanNoteText" placeholder="Reviewed right lower lung region. Compare with prior CT."></textarea>
+                    <div id="scanNoteError" style="color:#f87171;font-size:0.78rem;margin-bottom:8px;"></div>
+                    <div class="row-actions">
+                        <button class="small-btn" id="scanNotePolishBtn">Polish with AI</button>
+                        <button class="small-btn" id="scanNoteCancelBtn">Cancel</button>
+                        <button class="small-btn active" id="scanNoteSaveBtn">Save Note</button>
+                    </div>
+                    <div id="scanNoteReview" style="display:none;margin-top:10px;">
+                        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;">Original</div>
+                        <div class="ai-text" id="scanNoteOriginal"></div>
+                        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:4px;">AI Suggestion</div>
+                        <div class="ai-text" id="scanNoteSuggestion"></div>
+                        <div class="row-actions">
+                            <button class="small-btn" id="scanNoteKeepBtn">Keep Original</button>
+                            <button class="small-btn" id="scanNoteEditBtn">Edit Suggestion</button>
+                            <button class="small-btn active" id="scanNoteUseBtn">Use Rewrite</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -1956,5 +1993,106 @@ document.querySelectorAll('[data-layout]').forEach((btn) => {
     btn.addEventListener('click', () => setTimeout(onResize, 0));
 });
 </script>
+
+{% if patient_for_study %}
+<script>
+(function () {
+    // Self-contained: does not touch the main viewer IIFE above. Only the
+    // note text is ever sent to the AI endpoint - never the study id, the
+    // patient id, or any imaging data (see api/ai_notes.py).
+    const studyId = {{ study_id | tojson }};
+    const patientId = {{ patient_for_study.id | tojson }};
+    let originalTyped = '';
+
+    const listEl = document.getElementById('scanNotesList');
+    const composeEl = document.getElementById('scanNoteCompose');
+    const reviewEl = document.getElementById('scanNoteReview');
+    const textEl = document.getElementById('scanNoteText');
+    const errEl = document.getElementById('scanNoteError');
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+    function fmt(iso) {
+        try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+    }
+
+    async function loadNotes() {
+        const resp = await fetch('/api/patients/' + patientId + '/notes?study_id=' + encodeURIComponent(studyId));
+        if (!resp.ok) { listEl.textContent = 'Could not load notes.'; return; }
+        const data = await resp.json();
+        const notes = data.notes || [];
+        listEl.innerHTML = notes.length
+            ? notes.map((n) => '<div class="note-item">' + esc(n.current_content) +
+                '<div class="note-time">' + fmt(n.updated_at) + (n.ai_rewritten ? ' · AI-polished' : '') + '</div></div>').join('')
+            : 'No notes for this scan yet.';
+    }
+
+    document.getElementById('scanNoteAddBtn').addEventListener('click', () => {
+        textEl.value = ''; errEl.textContent = '';
+        composeEl.style.display = 'block'; reviewEl.style.display = 'none';
+    });
+    document.getElementById('scanNoteCancelBtn').addEventListener('click', () => {
+        composeEl.style.display = 'none';
+    });
+
+    document.getElementById('scanNotePolishBtn').addEventListener('click', async function () {
+        const text = textEl.value.trim();
+        if (!text) { errEl.textContent = 'Write a note first.'; return; }
+        errEl.textContent = '';
+        originalTyped = text;
+        const btn = this;
+        btn.disabled = true; btn.textContent = 'Polishing…';
+        try {
+            const resp = await fetch('/api/notes/polish', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: text }),
+            });
+            const data = await resp.json();
+            if (data.status !== 'OK') { errEl.textContent = data.message || 'AI rewriting is not configured.'; return; }
+            document.getElementById('scanNoteOriginal').textContent = originalTyped;
+            document.getElementById('scanNoteSuggestion').textContent = data.suggestion;
+            reviewEl.style.display = 'block';
+        } finally {
+            btn.disabled = false; btn.textContent = 'Polish with AI';
+        }
+    });
+
+    document.getElementById('scanNoteKeepBtn').addEventListener('click', () => { reviewEl.style.display = 'none'; });
+    document.getElementById('scanNoteEditBtn').addEventListener('click', () => {
+        textEl.value = document.getElementById('scanNoteSuggestion').textContent;
+        reviewEl.style.display = 'none';
+    });
+    document.getElementById('scanNoteUseBtn').addEventListener('click', () => {
+        textEl.value = document.getElementById('scanNoteSuggestion').textContent;
+        textEl.dataset.aiRewritten = '1';
+        textEl.dataset.originalTyped = originalTyped;
+        reviewEl.style.display = 'none';
+    });
+
+    document.getElementById('scanNoteSaveBtn').addEventListener('click', async () => {
+        const content = textEl.value.trim();
+        if (!content) { errEl.textContent = 'Note cannot be empty.'; return; }
+        const aiRewritten = textEl.dataset.aiRewritten === '1';
+        const resp = await fetch('/api/patients/' + patientId + '/notes', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content: content, study_id: studyId, ai_rewritten: aiRewritten,
+                original_content: aiRewritten ? textEl.dataset.originalTyped : null,
+            }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { errEl.textContent = data.message || 'Could not save note.'; return; }
+        delete textEl.dataset.aiRewritten;
+        delete textEl.dataset.originalTyped;
+        composeEl.style.display = 'none';
+        loadNotes();
+    });
+
+    loadNotes();
+})();
+</script>
+{% endif %}
 </body>
 </html>

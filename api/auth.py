@@ -156,6 +156,16 @@ def doctor_can_access_case(doctor_id, case_id, path=None):
     return row is not None
 
 
+def doctor_can_access_patient(doctor_id, patient_row, path=None):
+    """Patient authorization is ownership-based (unlike the case_access grant
+    table): a patient record belongs to the doctor who created it. Simpler
+    than cases' sharing model, and sufficient for this workflow - see
+    ARCHITECTURE_AUDIT.md if multi-doctor patient sharing is ever needed."""
+    if doctor_id is None or patient_row is None:
+        return False
+    return patient_row["doctor_id"] == doctor_id
+
+
 def authorize_case_or_none(case_ref, doctor_id, path=None):
     """Resolves a public case reference to a row the given doctor may see.
 

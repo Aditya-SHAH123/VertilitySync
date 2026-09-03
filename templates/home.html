@@ -1,0 +1,71 @@
+{% extends "clinical_light_base.html" %}
+{% set active = "overview" %}
+{% block title %}Home — VitalitySync{% endblock %}
+{% block content %}
+<style>
+    .greeting { font-size: 1.5rem; font-weight: 650; margin-bottom: 4px; }
+    .greeting .sub { font-size: 0.88rem; color: var(--muted); font-weight: 400; }
+    .stat-row { display: flex; gap: 14px; margin: 22px 0 30px; flex-wrap: wrap; }
+    .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+            padding: 16px 22px; min-width: 140px; }
+    .stat .n { font-size: 1.6rem; font-weight: 650; }
+    .stat .l { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    @media (max-width: 780px) { .cols { grid-template-columns: 1fr; } }
+    .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .section-head h3 { font-size: 0.86rem; font-weight: 650; }
+    .row-item { padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background 0.12s; }
+    .row-item:last-child { border-bottom: none; }
+    .row-item:hover { background: #fafafb; }
+    .row-item .t1 { font-size: 0.87rem; font-weight: 600; }
+    .row-item .t2 { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+</style>
+
+<div class="greeting"><span id="greetingText">Welcome back</span>, Dr. {{ doctor_name.split(' ')[0] if doctor_name else doctor_name }}
+    <div class="sub">Here's what's active across your patients.</div>
+</div>
+<script>
+    // Computed client-side from the doctor's own clock, not the server's -
+    // a server-side guess would show "Good evening" to someone opening this
+    // at 9am in a different timezone.
+    (function () {
+        const h = new Date().getHours();
+        const g = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+        document.getElementById('greetingText').textContent = g;
+    })();
+</script>
+
+<div class="stat-row">
+    <div class="stat"><div class="n">{{ patient_count }}</div><div class="l">Patients</div></div>
+    <div class="stat"><div class="n">{{ recent_scan_count }}</div><div class="l">Total Scans</div></div>
+</div>
+
+<div class="cols">
+    <div class="panel">
+        <div class="section-head" style="padding:16px 16px 0;"><h3>Recent Patients</h3></div>
+        {% if recent_patients %}
+            {% for p in recent_patients %}
+            <div class="row-item" onclick="window.location.href='/patients/{{ p.id }}'">
+                <div class="t1">{{ p.name }}</div>
+                <div class="t2">{{ p.internal_patient_id }} · Last scan: {{ p.last_scan_at[:10] if p.last_scan_at else 'None yet' }}</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty"><p>No patients yet.</p><a class="btn btn-primary" href="/patients">Add your first patient</a></div>
+        {% endif %}
+    </div>
+    <div class="panel">
+        <div class="section-head" style="padding:16px 16px 0;"><h3>Recent Imaging</h3></div>
+        {% if recent_imaging %}
+            {% for s in recent_imaging %}
+            <div class="row-item" onclick="window.location.href='/viewer/{{ s.study_id }}'">
+                <div class="t1">{{ s.modality }} — {{ s.patient_name }}</div>
+                <div class="t2">{{ s.created_at[:10] }}</div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty"><p>No scans uploaded yet.</p></div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
