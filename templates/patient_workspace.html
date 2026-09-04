@@ -37,6 +37,16 @@
                font-size: 0.86rem; white-space: pre-wrap; line-height: 1.4; }
     .ai-note { font-size: 0.78rem; color: var(--muted); margin-top: 8px; }
     .upload-status-line { font-size: 0.85rem; color: var(--muted); margin: 10px 0; }
+
+    .vitals-row { display: flex; align-items: center; justify-content: space-between; gap: 14px;
+                  padding: 13px 16px; border-bottom: 1px solid var(--line); }
+    .vitals-row:last-child { border-bottom: none; }
+    .vitals-time { font-weight: 650; font-size: 0.85rem; min-width: 130px; }
+    .vitals-readings { font-size: 0.85rem; color: var(--text); }
+    .vitals-readings span { color: var(--muted); font-size: 0.76rem; margin-right: 4px; }
+    .vitals-note { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+    #vitalsDlg { width: min(480px, 94vw); }
+    .vitals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
 </style>
 
 <div class="p-head">
@@ -49,6 +59,7 @@
     </div>
     <div class="p-actions">
         <button class="btn btn-sub" id="uploadBtn">Upload Scan</button>
+        <button class="btn btn-sub" id="addVitalsBtn">Add Vitals</button>
         <button class="btn btn-primary" id="addNoteBtn">Add Note</button>
     </div>
 </div>
@@ -56,6 +67,7 @@
 <div class="tabs">
     <button class="on" data-tab="overview">Overview</button>
     <button data-tab="imaging">Imaging</button>
+    <button data-tab="vitals">Vitals</button>
     <button data-tab="notes">Notes</button>
 </div>
 
@@ -63,6 +75,10 @@
     <div class="stat-strip">
         <div class="s"><div class="n" id="ovScanCount">—</div><div class="l">Total Scans</div></div>
         <div class="s"><div class="n" id="ovLastScan">—</div><div class="l">Latest Scan</div></div>
+    </div>
+    <div class="panel" style="padding:16px;margin-bottom:16px;">
+        <h3 style="font-size:0.86rem;margin-bottom:10px;">Latest Vitals</h3>
+        <div id="ovLatestVitals" style="font-size:0.85rem;color:var(--muted);">Loading…</div>
     </div>
     <div class="panel" style="padding:16px;">
         <h3 style="font-size:0.86rem;margin-bottom:10px;">Most Recent Note</h3>
@@ -72,6 +88,10 @@
 
 <div class="tab-panel panel" id="tab-imaging" hidden style="padding:4px 0;">
     <div id="scanHistory"></div>
+</div>
+
+<div class="tab-panel panel" id="tab-vitals" hidden style="padding:4px 0;">
+    <div id="vitalsHistory"></div>
 </div>
 
 <div class="tab-panel panel" id="tab-notes" hidden>
@@ -95,6 +115,52 @@
     <div class="dlg-actions">
         <button type="button" class="btn btn-sub" id="dupCancel">Cancel</button>
         <button type="button" class="btn btn-primary" id="dupOpen">Open Existing Scan</button>
+    </div>
+</dialog>
+
+<dialog id="vitalsDlg">
+    <h2>Add Vitals</h2>
+    <p style="font-size:0.82rem;color:var(--muted);margin:0 0 12px;">Fill in whatever was measured — nothing here is required except at least one value.</p>
+    <div class="vitals-grid">
+        <div>
+            <label for="vHeartRate">Heart rate (bpm)</label>
+            <input type="number" id="vHeartRate" min="0" max="300">
+        </div>
+        <div>
+            <label for="vSpo2">Oxygen saturation (%)</label>
+            <input type="number" id="vSpo2" min="0" max="100" step="0.1">
+        </div>
+        <div>
+            <label for="vSystolic">Systolic BP (mmHg)</label>
+            <input type="number" id="vSystolic" min="0" max="300">
+        </div>
+        <div>
+            <label for="vDiastolic">Diastolic BP (mmHg)</label>
+            <input type="number" id="vDiastolic" min="0" max="250">
+        </div>
+        <div>
+            <label for="vTemp">Temperature (°C)</label>
+            <input type="number" id="vTemp" min="25" max="45" step="0.1">
+        </div>
+        <div>
+            <label for="vResp">Respiratory rate (/min)</label>
+            <input type="number" id="vResp" min="0" max="100">
+        </div>
+        <div>
+            <label for="vWeight">Weight (kg)</label>
+            <input type="number" id="vWeight" min="0" max="500" step="0.1">
+        </div>
+        <div>
+            <label for="vHeight">Height (cm)</label>
+            <input type="number" id="vHeight" min="0" max="300" step="0.1">
+        </div>
+    </div>
+    <label for="vNotes">Notes</label>
+    <input type="text" id="vNotes" maxlength="500" placeholder="Optional">
+    <div class="field-error" id="vitalsError"></div>
+    <div class="dlg-actions">
+        <button type="button" class="btn btn-sub" id="cancelVitals">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveVitals">Save Vitals</button>
     </div>
 </dialog>
 
@@ -159,7 +225,7 @@
         b.addEventListener('click', function () {
             document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('on'); });
             b.classList.add('on');
-            ['overview', 'imaging', 'notes'].forEach(function (t) {
+            ['overview', 'imaging', 'vitals', 'notes'].forEach(function (t) {
                 document.getElementById('tab-' + t).hidden = (t !== b.getAttribute('data-tab'));
             });
         });
@@ -211,6 +277,76 @@
             });
         });
     }
+
+    // ---------------- vitals ----------------
+    function vitalsSummaryLine(v) {
+        const parts = [];
+        if (v.heart_rate_bpm != null) parts.push('<span>HR</span>' + v.heart_rate_bpm + ' bpm');
+        if (v.systolic_bp_mmhg != null && v.diastolic_bp_mmhg != null)
+            parts.push('<span>BP</span>' + v.systolic_bp_mmhg + '/' + v.diastolic_bp_mmhg + ' mmHg');
+        if (v.oxygen_saturation_pct != null) parts.push('<span>SpO₂</span>' + v.oxygen_saturation_pct + '%');
+        if (v.respiratory_rate_bpm != null) parts.push('<span>RR</span>' + v.respiratory_rate_bpm + '/min');
+        if (v.temperature_c != null) parts.push('<span>Temp</span>' + v.temperature_c + '°C');
+        if (v.weight_kg != null) parts.push('<span>Wt</span>' + v.weight_kg + ' kg');
+        if (v.height_cm != null) parts.push('<span>Ht</span>' + v.height_cm + ' cm');
+        return parts.join('&nbsp;&nbsp;·&nbsp;&nbsp;') || 'No readings';
+    }
+
+    async function loadVitals() {
+        const resp = await fetch('/api/patients/' + patientId + '/vitals');
+        const data = await resp.json();
+        const vitals = data.vitals || [];
+        const ov = document.getElementById('ovLatestVitals');
+        ov.innerHTML = vitals.length
+            ? vitalsSummaryLine(vitals[0]) + '<div class="vitals-note">' + fmt(vitals[0].recorded_at) + '</div>'
+            : 'No vitals recorded yet.';
+
+        const el = document.getElementById('vitalsHistory');
+        if (!vitals.length) {
+            el.innerHTML = '<div class="empty"><p>No vitals recorded yet</p>' +
+                '<button class="btn btn-primary" id="emptyVitals">Add Vitals</button></div>';
+            const b = document.getElementById('emptyVitals');
+            if (b) b.addEventListener('click', function () { openVitalsDlg(); });
+            return;
+        }
+        el.innerHTML = vitals.map(function (v) {
+            return '<div class="vitals-row"><div><div class="vitals-time">' + fmt(v.recorded_at) + '</div>' +
+                (v.notes ? '<div class="vitals-note">' + esc(v.notes) + '</div>' : '') + '</div>' +
+                '<div class="vitals-readings">' + vitalsSummaryLine(v) + '</div></div>';
+        }).join('');
+    }
+
+    const vitalsDlg = document.getElementById('vitalsDlg');
+    function openVitalsDlg() {
+        ['vHeartRate', 'vSpo2', 'vSystolic', 'vDiastolic', 'vTemp', 'vResp', 'vWeight', 'vHeight', 'vNotes']
+            .forEach(function (id) { document.getElementById(id).value = ''; });
+        document.getElementById('vitalsError').textContent = '';
+        vitalsDlg.showModal();
+    }
+    document.getElementById('addVitalsBtn').addEventListener('click', openVitalsDlg);
+    document.getElementById('cancelVitals').addEventListener('click', function () { vitalsDlg.close(); });
+    document.getElementById('saveVitals').addEventListener('click', async function () {
+        const num = function (id) {
+            const v = document.getElementById(id).value;
+            return v === '' ? null : parseFloat(v);
+        };
+        const errEl = document.getElementById('vitalsError');
+        const payload = {
+            heart_rate_bpm: num('vHeartRate'), oxygen_saturation_pct: num('vSpo2'),
+            systolic_bp_mmhg: num('vSystolic'), diastolic_bp_mmhg: num('vDiastolic'),
+            temperature_c: num('vTemp'), respiratory_rate_bpm: num('vResp'),
+            weight_kg: num('vWeight'), height_cm: num('vHeight'),
+            notes: document.getElementById('vNotes').value.trim() || null,
+        };
+        const resp = await fetch('/api/patients/' + patientId + '/vitals', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { errEl.textContent = data.message || 'Could not save vitals.'; return; }
+        vitalsDlg.close();
+        loadVitals();
+    });
 
     // ---------------- notes ----------------
     async function loadNotes() {
@@ -357,6 +493,7 @@
     });
 
     loadPatient();
+    loadVitals();
     loadNotes();
 })();
 </script>

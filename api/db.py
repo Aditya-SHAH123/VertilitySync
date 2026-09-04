@@ -279,6 +279,29 @@ CREATE TABLE IF NOT EXISTS clinical_notes (
     updated_at        TEXT NOT NULL
 );
 
+-- Vital signs: a point-in-time reading, not a running "current state" -
+-- every entry is retained (see api/patients.py's create_vital_signs), so a
+-- patient's trend over time is just "list every row, ordered by
+-- recorded_at". Every measurement column is nullable - a single reading
+-- rarely includes all of them, and a doctor should be able to log just a
+-- heart rate without being forced to fill in fields they didn't measure.
+CREATE TABLE IF NOT EXISTS vital_signs (
+    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id             INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    doctor_id              INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    recorded_at            TEXT NOT NULL,
+    heart_rate_bpm         INTEGER,
+    systolic_bp_mmhg       INTEGER,
+    diastolic_bp_mmhg      INTEGER,
+    respiratory_rate_bpm   INTEGER,
+    temperature_c          REAL,
+    oxygen_saturation_pct  REAL,
+    weight_kg              REAL,
+    height_cm              REAL,
+    notes                  TEXT,
+    created_at             TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_cases_owner ON cases(owner_doctor_id);
 CREATE INDEX IF NOT EXISTS idx_case_access_doctor ON case_access(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_notes_case ON notes(case_id);
@@ -289,6 +312,7 @@ CREATE INDEX IF NOT EXISTS idx_patient_studies_hash ON patient_studies(scan_hash
 CREATE INDEX IF NOT EXISTS idx_patient_studies_uid ON patient_studies(study_instance_uid);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_patient ON clinical_notes(patient_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_study ON clinical_notes(study_id);
+CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id);
 """
 
 # Postgres dialect: SERIAL, TIMESTAMPTZ, BOOLEAN. Kept in sync by hand with
@@ -387,6 +411,23 @@ CREATE TABLE IF NOT EXISTS clinical_notes (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS vital_signs (
+    id                     SERIAL PRIMARY KEY,
+    patient_id             INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    doctor_id              INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    recorded_at            TIMESTAMPTZ NOT NULL,
+    heart_rate_bpm         INTEGER,
+    systolic_bp_mmhg       INTEGER,
+    diastolic_bp_mmhg      INTEGER,
+    respiratory_rate_bpm   INTEGER,
+    temperature_c          REAL,
+    oxygen_saturation_pct  REAL,
+    weight_kg              REAL,
+    height_cm              REAL,
+    notes                  TEXT,
+    created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_cases_owner ON cases(owner_doctor_id);
 CREATE INDEX IF NOT EXISTS idx_case_access_doctor ON case_access(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_notes_case ON notes(case_id);
@@ -397,6 +438,7 @@ CREATE INDEX IF NOT EXISTS idx_patient_studies_hash ON patient_studies(scan_hash
 CREATE INDEX IF NOT EXISTS idx_patient_studies_uid ON patient_studies(study_instance_uid);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_patient ON clinical_notes(patient_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_study ON clinical_notes(study_id);
+CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id);
 """
 
 
@@ -415,7 +457,7 @@ def reset_db(path=None):
     against a real Postgres/Supabase database - it is only exercised by the
     test suite, which always uses SQLite (tests never set DATABASE_URL)."""
     conn = get_db(path)
-    for table in ("audit_log", "clinical_notes", "patient_studies", "patients",
+    for table in ("audit_log", "vital_signs", "clinical_notes", "patient_studies", "patients",
                   "notes", "case_access", "cases", "doctors"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()

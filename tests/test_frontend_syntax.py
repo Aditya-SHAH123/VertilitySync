@@ -34,6 +34,7 @@ from index import app  # noqa: E402
 import db as dbmod  # noqa: E402
 import auth as authmod  # noqa: E402
 import cases as casemod  # noqa: E402
+import patients as patientsmod  # noqa: E402
 
 FE_EMAIL, FE_PASS = 'frontend.check@example.test', 'frontend-check-password'
 
@@ -102,6 +103,7 @@ def main():
     dbmod.reset_db()
     doctor_id = authmod.create_doctor(FE_EMAIL, FE_PASS, 'Dr Frontend')
     case_row = casemod.create_case(doctor_id, 'Syntax check case')
+    patient = patientsmod.create_patient(doctor_id, 'Syntax', 'Check')
 
     client = app.test_client()
     client.post('/api/auth/login', json={'email': FE_EMAIL, 'password': FE_PASS})
@@ -120,10 +122,14 @@ def main():
         ('specifications.html (/specifications)', '/specifications', True, True),
         ('safety.html (/safety)', '/safety', True, True),
         ('login.html (/login)', '/login', True, True),
+        ('signup.html (/signup)', '/signup', True, True),
         ('cases.html (/cases)', '/cases', True, False),
         ('case_workspace.html (/cases/<ref>)', f'/cases/{case_row["case_ref"]}', True, False),
         ('dashboard.html (/dashboard)', '/dashboard', True, False),
         ('viewer.html (/viewer/<id>)', '/viewer/syntax-check-study-id', True, False),
+        ('home.html (/home)', '/home', True, False),
+        ('patients.html (/patients)', '/patients', True, False),
+        ('patient_workspace.html (/patients/<id>)', f'/patients/{patient["id"]}', True, False),
     ]
 
     for label, path, expect_scripts, anonymous in pages:

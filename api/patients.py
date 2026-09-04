@@ -285,3 +285,109 @@ def note_to_dict(row):
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Vital signs
+# ---------------------------------------------------------------------------
+# Every reading is a new row, never an update-in-place - a patient's trend
+# over time is the full history, not a single "current" value. Every
+# measurement is optional (a doctor logging just a heart rate shouldn't be
+# forced to fill in fields they didn't take), but at least one must be
+# present, and each is checked against a generous physiological range -
+# not a clinical judgment, just a guard against an obvious typo like a
+# heart rate of 3000.
+
+VITAL_RANGES = {
+    "heart_rate_bpm": (0, 300, "bpm"),
+    "systolic_bp_mmhg": (0, 300, "mmHg"),
+    "diastolic_bp_mmhg": (0, 250, "mmHg"),
+    "respiratory_rate_bpm": (0, 100, "breaths/min"),
+    "temperature_c": (25.0, 45.0, "°C"),
+    "oxygen_saturation_pct": (0.0, 100.0, "%"),
+    "weight_kg": (0.0, 500.0, "kg"),
+    "height_cm": (0.0, 300.0, "cm"),
+}
+
+
+def _validate_vitals(values):
+    if all(v is None for v in values.values()):
+        raise ValueError("At least one vital-sign value is required.")
+    for field, value in values.items():
+        if value is None:
+            continue
+        lo, hi, unit = VITAL_RANGES[field]
+        if not (lo <= value <= hi):
+            raise ValueError(f"{field.replace('_', ' ')} of {value}{unit} is outside the "
+                              f"plausible range ({lo}-{hi}{unit}); check for a data-entry error.")
+
+
+def create_vital_signs(patient_id, doctor_id, recorded_at=None, heart_rate_bpm=None,
+                        systolic_bp_mmhg=None, diastolic_bp_mmhg=None,
+                        respiratory_rate_bpm=None, temperature_c=None,
+                        oxygen_saturation_pct=None, weight_kg=None, height_cm=None,
+                        notes=None, path=None):
+    values = {
+        "heart_rate_bpm": heart_rate_bpm, "systolic_bp_mmhg": systolic_bp_mmhg,
+        "diastolic_bp_mmhg": diastolic_bp_mmhg, "respiratory_rate_bpm": respiratory_rate_bpm,
+        "temperature_c": temperature_c, "oxygen_saturation_pct": oxygen_saturation_pct,
+        "weight_kg": weight_kg, "height_cm": height_cm,
+    }
+    _validate_vitals(values)
+    conn = get_db(path)
+    now = utc_now_iso()
+    cur = conn.execute(
+        "INSERT INTO vital_signs (patient_id, doctor_id, recorded_at, heart_rate_bpm, "
+        "systolic_bp_mmhg, diastolic_bp_mmhg, respiratory_rate_bpm, temperature_c, "
+        "oxygen_saturation_pct, weight_kg, height_cm, notes, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (patient_id, doctor_id, recorded_at or now, values["heart_rate_bpm"],
+         values["systolic_bp_mmhg"], values["diastolic_bp_mmhg"], values["respiratory_rate_bpm"],
+         values["temperature_c"], values["oxygen_saturation_pct"], values["weight_kg"],
+         values["height_cm"], (notes or "").strip() or None, now),
+    )
+    new_id = cur.fetchone()["id"]
+    conn.commit()
+    return get_vital_signs(new_id, path=path)
+
+
+def get_vital_signs(vitals_id, path=None):
+    conn = get_db(path)
+    return conn.execute("SELECT * FROM vital_signs WHERE id = ?", (vitals_id,)).fetchone()
+
+
+def list_vital_signs(patient_id, path=None):
+    conn = get_db(path)
+    return conn.execute(
+        "SELECT * FROM vital_signs WHERE patient_id = ? ORDER BY recorded_at DESC",
+        (patient_id,),
+    ).fetchall()
+
+
+def delete_vital_signs(vitals_id, doctor_id, path=None):
+    conn = get_db(path)
+    row = conn.execute("SELECT doctor_id FROM vital_signs WHERE id = ?", (vitals_id,)).fetchone()
+    if row is None:
+        raise KeyError(vitals_id)
+    if row["doctor_id"] != doctor_id:
+        raise PermissionError("Only the recording doctor may delete this reading.")
+    conn.execute("DELETE FROM vital_signs WHERE id = ?", (vitals_id,))
+    conn.commit()
+
+
+def vital_signs_to_dict(row):
+    return {
+        "id": row["id"],
+        "patient_id": row["patient_id"],
+        "recorded_at": row["recorded_at"],
+        "heart_rate_bpm": row["heart_rate_bpm"],
+        "systolic_bp_mmhg": row["systolic_bp_mmhg"],
+        "diastolic_bp_mmhg": row["diastolic_bp_mmhg"],
+        "respiratory_rate_bpm": row["respiratory_rate_bpm"],
+        "temperature_c": row["temperature_c"],
+        "oxygen_saturation_pct": row["oxygen_saturation_pct"],
+        "weight_kg": row["weight_kg"],
+        "height_cm": row["height_cm"],
+        "notes": row["notes"],
+        "created_at": row["created_at"],
+    }

@@ -2009,6 +2009,66 @@ def api_polish_note():
 
 
 # ---------------------------------------------------------------------------
+# VITAL SIGNS API
+# ---------------------------------------------------------------------------
+# Heart rate, blood pressure, and the other common bedside measurements.
+# Every reading is a new row (a history, not a single "current" value) -
+# see patients.py's VITAL_RANGES for the plausibility bounds enforced here.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/patients/<int:patient_id>/vitals', methods=['POST'])
+@authmod.api_login_required
+def api_create_vital_signs(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    doctor = authmod.current_doctor()
+    data = request.get_json(silent=True) or {}
+    try:
+        record = patientsmod.create_vital_signs(
+            patient_id, doctor['id'], recorded_at=data.get('recorded_at'),
+            heart_rate_bpm=data.get('heart_rate_bpm'),
+            systolic_bp_mmhg=data.get('systolic_bp_mmhg'),
+            diastolic_bp_mmhg=data.get('diastolic_bp_mmhg'),
+            respiratory_rate_bpm=data.get('respiratory_rate_bpm'),
+            temperature_c=data.get('temperature_c'),
+            oxygen_saturation_pct=data.get('oxygen_saturation_pct'),
+            weight_kg=data.get('weight_kg'), height_cm=data.get('height_cm'),
+            notes=data.get('notes'),
+        )
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    dbmod.record_audit('vital_signs_recorded', doctor_id=doctor['id'],
+                        target_type='patient', target_id=patient_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'vitals': patientsmod.vital_signs_to_dict(record)}), 201
+
+
+@app.route('/api/patients/<int:patient_id>/vitals', methods=['GET'])
+@authmod.api_login_required
+def api_list_vital_signs(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    rows = patientsmod.list_vital_signs(patient_id)
+    return jsonify({'status': 'OK', 'vitals': [patientsmod.vital_signs_to_dict(r) for r in rows]})
+
+
+@app.route('/api/vitals/<int:vitals_id>', methods=['DELETE'])
+@authmod.api_login_required
+def api_delete_vital_signs(vitals_id):
+    doctor = authmod.current_doctor()
+    try:
+        patientsmod.delete_vital_signs(vitals_id, doctor['id'])
+    except KeyError:
+        return jsonify({'status': 'NOT_FOUND'}), 404
+    except PermissionError:
+        return jsonify({'status': 'FORBIDDEN'}), 403
+    dbmod.record_audit('vital_signs_deleted', doctor_id=doctor['id'],
+                        target_type='vitals', target_id=vitals_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK'})
+
+
+# ---------------------------------------------------------------------------
 # CASES & NOTES API
 # ---------------------------------------------------------------------------
 # Every endpoint below authenticates, then re-verifies case authorization

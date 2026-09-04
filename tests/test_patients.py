@@ -283,6 +283,41 @@ def main():
     finally:
         ai_notes.polish_note = original_polish
 
+    # ---------------- vital signs ----------------
+    r = client.post('/api/patients/' + str(patient_id) + '/vitals', json={
+        'heart_rate_bpm': 78, 'systolic_bp_mmhg': 118, 'diastolic_bp_mmhg': 76,
+        'oxygen_saturation_pct': 98.5,
+    })
+    check('create vital signs -> 201', r.status_code == 201, (r.status_code, r.get_json()))
+    vitals_id = r.get_json()['vitals']['id']
+    check('vitals response echoes heart rate', r.get_json()['vitals']['heart_rate_bpm'] == 78)
+    check('vitals response has a recorded_at timestamp', r.get_json()['vitals']['recorded_at'] is not None)
+
+    r = client.post('/api/patients/' + str(patient_id) + '/vitals', json={})
+    check('vitals with no values at all -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post('/api/patients/' + str(patient_id) + '/vitals', json={'heart_rate_bpm': 3000})
+    check('implausible heart rate -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post('/api/patients/' + str(patient_id) + '/vitals', json={'temperature_c': 37.1})
+    check('a single vital (temperature only) is enough -> 201', r.status_code == 201, r.status_code)
+    second_vitals_id = r.get_json()['vitals']['id']
+
+    r = client.get('/api/patients/' + str(patient_id) + '/vitals')
+    check('vitals history has both readings', len(r.get_json()['vitals']) == 2, r.get_json())
+    check('vitals history is most-recent-first',
+          r.get_json()['vitals'][0]['id'] == second_vitals_id, r.get_json()['vitals'])
+
+    r = other_client.get('/api/patients/' + str(patient_id) + '/vitals')
+    check("another doctor cannot read this patient's vitals -> 404", r.status_code == 404, r.status_code)
+
+    r = other_client.delete('/api/vitals/' + str(vitals_id))
+    check("another doctor cannot delete this doctor's vitals reading -> 403", r.status_code == 403, r.status_code)
+    r = client.delete('/api/vitals/' + str(vitals_id))
+    check('recording doctor can delete a vitals reading -> 200', r.status_code == 200, r.status_code)
+    r = client.get('/api/patients/' + str(patient_id) + '/vitals')
+    check('vitals count drops after delete', len(r.get_json()['vitals']) == 1)
+
     # ---------------- archive ----------------
     r = client.post('/api/patients/' + str(patient_id) + '/archive', json={'archived': True})
     check('archive patient -> 200', r.status_code == 200, r.status_code)
