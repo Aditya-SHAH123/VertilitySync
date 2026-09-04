@@ -35,6 +35,7 @@ import db_engine as dbengine     # noqa: E402
 import measurements as measmod   # noqa: E402
 import patients as patientsmod   # noqa: E402
 import ai_notes                  # noqa: E402
+import supa_auth as supabase_auth  # noqa: E402 - see supa_auth.py's docstring for the naming reason
 
 # Initialize Flask app
 # The template folder is pointed to the root /templates directory
@@ -112,13 +113,37 @@ def signup_page():
 
 @app.route('/api/auth/signup', methods=['POST'])
 def api_signup():
-    """Creates a doctor account and immediately signs them in. Password
-    policy, duplicate-email checking, and hashing are all enforced inside
-    auth.create_doctor() - this route adds no separate validation."""
+    """Creates a doctor account and, when possible, immediately signs them in.
+
+    Credential storage/verification goes through Supabase Auth
+    (SUPABASE_URL/SUPABASE_KEY) when configured; otherwise falls back to
+    the local auth.create_doctor() path unchanged - see
+    api/supabase_auth.py's module docstring. Either way, a local `doctors`
+    row is created so every existing authorization check keeps working.
+    """
     payload = request.get_json(silent=True) or request.form
     email = (payload.get('email') or '').strip()
     password = payload.get('password') or ''
     display_name = (payload.get('display_name') or '').strip()
+
+    if supabase_auth.is_configured():
+        result = supabase_auth.sign_up(email, password)
+        if result['status'] == 'FAIL':
+            return jsonify({'status': 'FAIL', 'message': result['message']}), 400
+        try:
+            doctor_id = authmod.create_doctor_from_supabase(email, display_name, result['user_id'])
+        except ValueError as exc:
+            return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+        doctor = authmod.get_doctor(doctor_id)
+        if not result['confirmed']:
+            # The project requires email confirmation before this account
+            # can sign in - there is no valid session to establish yet.
+            return jsonify({'status': 'CONFIRMATION_REQUIRED',
+                             'message': 'Check your email to confirm your account, then sign in.'}), 200
+        authmod.login_session(doctor)
+        dbmod.record_audit('signup', doctor_id=doctor['id'], ip=authmod.client_ip())
+        return jsonify({'status': 'OK', 'display_name': doctor['display_name'],
+                        'redirect': '/home'}), 201
 
     try:
         doctor_id = authmod.create_doctor(email, password, display_name)
@@ -134,10 +159,35 @@ def api_signup():
 
 @app.route('/api/auth/login', methods=['POST'])
 def api_login():
-    """Validates credentials server-side and establishes a session."""
+    """Validates credentials server-side and establishes a session.
+
+    Goes through Supabase Auth when configured (see api/supabase_auth.py);
+    otherwise falls back to the local password-hash check unchanged. A
+    doctor created locally before Supabase was configured (no
+    supabase_user_id on file) will not be found there and correctly falls
+    through to "invalid credentials" until they sign up again - the two
+    credential stores are not silently merged.
+    """
     payload = request.get_json(silent=True) or request.form
     email = (payload.get('email') or '').strip()
     password = payload.get('password') or ''
+
+    if supabase_auth.is_configured():
+        result = supabase_auth.sign_in(email, password)
+        if result['status'] != 'OK':
+            dbmod.record_audit('login_failed', doctor_id=None, target_type='email',
+                                target_id=email[:120], outcome='denied', ip=authmod.client_ip())
+            return jsonify({'status': 'FAIL', 'message': 'Invalid email or password.'}), 401
+        doctor = authmod.get_doctor_by_email(email)
+        if doctor is None or not doctor['supabase_user_id']:
+            # Known to Supabase but not linked locally (e.g. created
+            # directly in the Supabase dashboard, not through /signup).
+            doctor_id = authmod.create_doctor_from_supabase(email, email.split('@')[0], result['user_id'])
+            doctor = authmod.get_doctor(doctor_id)
+        authmod.login_session(doctor)
+        dbmod.record_audit('login', doctor_id=doctor['id'], ip=authmod.client_ip())
+        return jsonify({'status': 'OK', 'display_name': doctor['display_name'],
+                        'redirect': '/home'}), 200
 
     doctor = authmod.verify_credentials(email, password)
     if doctor is None:

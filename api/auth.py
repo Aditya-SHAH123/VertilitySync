@@ -82,6 +82,49 @@ def get_doctor(doctor_id, path=None):
     return conn.execute("SELECT * FROM doctors WHERE id = ?", (doctor_id,)).fetchone()
 
 
+def get_doctor_by_email(email, path=None):
+    email = (email or "").strip().lower()
+    conn = get_db(path)
+    return conn.execute("SELECT * FROM doctors WHERE email = ?", (email,)).fetchone()
+
+
+# A doctor authenticated via Supabase has no locally-verifiable password -
+# Supabase Auth is the source of truth for their credential. This sentinel
+# is never produced by generate_password_hash() and verify_credentials()
+# is never called for these accounts (see api/supabase_auth.py), so it can
+# never accidentally succeed a local password check.
+SUPABASE_MANAGED_PASSWORD_SENTINEL = "supabase-managed:no-local-password"
+
+
+def create_doctor_from_supabase(email, display_name, supabase_user_id, path=None):
+    """Creates (or links) the local shadow row for a Supabase-authenticated
+    doctor, so every existing authorization check - which is written
+    against a local integer doctor id - keeps working unchanged. Returns
+    the local doctor id."""
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        raise ValueError("A valid email address is required.")
+    display_name = (display_name or "").strip() or email.split("@")[0]
+
+    existing = get_doctor_by_email(email, path=path)
+    conn = get_db(path)
+    if existing is not None:
+        if not existing["supabase_user_id"]:
+            conn.execute("UPDATE doctors SET supabase_user_id = ? WHERE id = ?",
+                         (supabase_user_id, existing["id"]))
+            conn.commit()
+        return existing["id"]
+
+    cur = conn.execute(
+        "INSERT INTO doctors (email, password_hash, display_name, created_at, supabase_user_id) "
+        "VALUES (?, ?, ?, ?, ?) RETURNING id",
+        (email, SUPABASE_MANAGED_PASSWORD_SENTINEL, display_name, utc_now_iso(), supabase_user_id),
+    )
+    new_id = cur.fetchone()["id"]
+    conn.commit()
+    return new_id
+
+
 # ---------------------------------------------------------------------------
 # Session helpers
 # ---------------------------------------------------------------------------

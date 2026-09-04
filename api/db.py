@@ -190,11 +190,12 @@ def close_db():
 # this codebase already reads/writes them, e.g. utc_now_iso()).
 SQLITE_SCHEMA = """
 CREATE TABLE IF NOT EXISTS doctors (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    email          TEXT NOT NULL UNIQUE,
-    password_hash  TEXT NOT NULL,
-    display_name   TEXT NOT NULL,
-    created_at     TEXT NOT NULL
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    email              TEXT NOT NULL UNIQUE,
+    password_hash      TEXT NOT NULL,
+    display_name       TEXT NOT NULL,
+    created_at         TEXT NOT NULL,
+    supabase_user_id   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS cases (
@@ -322,11 +323,12 @@ CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id);
 # had that script run against it yet.
 POSTGRES_SCHEMA = """
 CREATE TABLE IF NOT EXISTS doctors (
-    id             SERIAL PRIMARY KEY,
-    email          TEXT NOT NULL UNIQUE,
-    password_hash  TEXT NOT NULL,
-    display_name   TEXT NOT NULL,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                 SERIAL PRIMARY KEY,
+    email              TEXT NOT NULL UNIQUE,
+    password_hash      TEXT NOT NULL,
+    display_name       TEXT NOT NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    supabase_user_id   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS cases (
@@ -446,9 +448,33 @@ def _schema_for(conn):
     return SQLITE_SCHEMA if conn.dialect == "sqlite" else POSTGRES_SCHEMA
 
 
+def _ensure_column(conn, table, column, coltype):
+    """Adds a column to an already-existing table if it's missing.
+
+    `CREATE TABLE IF NOT EXISTS` (used everywhere else in this file) does
+    nothing for a table that already exists with an older shape - a real
+    database created before `doctors.supabase_user_id` existed needs this
+    to pick the column up without a destructive drop/recreate. Postgres
+    supports `ADD COLUMN IF NOT EXISTS` directly; SQLite doesn't, so the
+    SQLite path just attempts the ALTER and swallows the "duplicate
+    column" error if it's already there.
+    """
+    if conn.dialect == "postgres":
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {coltype}")
+        conn.commit()
+    else:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+            conn.commit()
+        except sqlite3.OperationalError as exc:
+            if "duplicate column" not in str(exc).lower():
+                raise
+
+
 def init_db(path=None):
     conn = get_db(path)
     conn.executescript(_schema_for(conn))
+    _ensure_column(conn, "doctors", "supabase_user_id", "TEXT")
     return conn
 
 

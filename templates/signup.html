@@ -39,6 +39,9 @@
         .error { display: none; background: #2a1416; border: 1px solid #5b2226; color: var(--danger);
                  border-radius: 6px; padding: 10px 12px; font-size: 0.85rem; margin-bottom: 16px; }
         .error.visible { display: block; }
+        .info { display: none; background: #10281c; border: 1px solid #1f4d36; color: #6ee7b7;
+                border-radius: 6px; padding: 10px 12px; font-size: 0.85rem; margin-bottom: 16px; }
+        .info.visible { display: block; }
 
         .foot { margin-top: 18px; font-size: 0.75rem; color: var(--muted); line-height: 1.6; }
         .foot a { color: var(--accent); }
@@ -58,6 +61,7 @@
 
     <form id="signupForm" autocomplete="on">
         <div class="error" id="errorBox"></div>
+        <div class="info" id="infoBox"></div>
 
         <label for="displayName">Full name</label>
         <input type="text" id="displayName" name="displayName" autocomplete="name" required maxlength="120">
@@ -88,6 +92,7 @@
     const form = document.getElementById('signupForm');
     const errorBox = document.getElementById('errorBox');
     const submitBtn = document.getElementById('submitBtn');
+    let confirmationPending = false;
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -120,13 +125,23 @@
                 errorBox.classList.add('visible');
                 return;
             }
+            if (data.status === 'CONFIRMATION_REQUIRED') {
+                document.getElementById('infoBox').textContent = data.message;
+                document.getElementById('infoBox').classList.add('visible');
+                form.querySelectorAll('input').forEach((el) => { el.disabled = true; });
+                submitBtn.textContent = 'Check your email';
+                confirmationPending = true;
+                return;
+            }
             window.location.href = data.redirect || '/home';
         } catch (err) {
             errorBox.textContent = 'Network error while creating your account.';
             errorBox.classList.add('visible');
         } finally {
-            submitBtn.disabled = false;
-            submitBtn.textContent = 'Create Account';
+            if (!confirmationPending) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Create Account';
+            }
         }
     });
 })();

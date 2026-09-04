@@ -23,6 +23,7 @@ SUITES = [
     'test_measurements_api.py',    # integration: measurements/annotations/ROI/job endpoints
     'test_patients.py',            # patient workflow: CRUD, scan history, duplicate detection, notes, AI polish
     'test_auth.py',                # authentication, case/study authorization, audit log
+    'test_supa_auth.py',           # Supabase Auth integration + local fallback (mocked, no real network calls)
     'test_higgsfield_guard.py',    # marketing-media privacy boundary
     'test_colab_export.py',        # remote-tree grouping into importable archives
     'test_frontend_syntax.py',     # rendered-template JS parse check

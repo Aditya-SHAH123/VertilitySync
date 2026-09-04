@@ -16,6 +16,10 @@ os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_patients.db')
 # Tests must never touch a real Postgres/Supabase instance, even if
 # DATABASE_URL is set in the real environment/.env for production use.
 os.environ['DATABASE_URL'] = ''
+# Same isolation for the Supabase Auth integration - tests must never
+# call the real Supabase API.
+os.environ['SUPABASE_URL'] = ''
+os.environ['SUPABASE_KEY'] = ''
 os.environ.setdefault('IMAGING_DATABASE_URL', 'sqlite:////tmp/vitalitysync_test_patients_imaging.db')
 # Without this, index.py's load_dotenv() picks up the real STUDY_STORE_PATH
 # from .env (./instance/studies) and this suite's synthetic fixtures land in

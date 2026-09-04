@@ -153,6 +153,10 @@ def main():
     # Tests must never touch a real Postgres/Supabase instance, even if
     # DATABASE_URL is set in the real environment/.env for production use.
     os.environ['DATABASE_URL'] = ''
+    # Same isolation for the Supabase Auth integration - tests must never
+    # call the real Supabase API.
+    os.environ['SUPABASE_URL'] = ''
+    os.environ['SUPABASE_KEY'] = ''
     os.environ.setdefault('STUDY_STORE_PATH', '/tmp/vs_colab_app_store')
     for p in (os.environ['DATABASE_PATH'],):
         if os.path.exists(p):

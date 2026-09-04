@@ -26,6 +26,10 @@ os.environ.setdefault('DATABASE_PATH', '/tmp/vitalitysync_test_frontend.db')
 # Tests must never touch a real Postgres/Supabase instance, even if
 # DATABASE_URL is set in the real environment/.env for production use.
 os.environ['DATABASE_URL'] = ''
+# Same isolation for the Supabase Auth integration - tests must never
+# call the real Supabase API.
+os.environ['SUPABASE_URL'] = ''
+os.environ['SUPABASE_KEY'] = ''
 if os.path.exists(os.environ['DATABASE_PATH']):
     os.remove(os.environ['DATABASE_PATH'])
 
