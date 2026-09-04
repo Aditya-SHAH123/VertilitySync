@@ -390,8 +390,27 @@
         fd.append('patient_id', String(patientId));
 
         statusEl.textContent = 'Uploading…';
-        const resp = await fetch('/api/dicom/upload', { method: 'POST', body: fd });
-        const data = await resp.json();
+        let resp, raw, data;
+        try {
+            resp = await fetch('/api/dicom/upload', { method: 'POST', body: fd });
+            raw = await resp.text();
+        } catch (networkErr) {
+            statusEl.textContent = 'Network error while uploading: ' + networkErr.message;
+            return;
+        }
+        try {
+            data = JSON.parse(raw);
+        } catch (parseErr) {
+            // The server (or a platform layer in front of it, e.g. a
+            // request-size limit) returned something other than JSON -
+            // most commonly a plain "Request Entity Too Large" body.
+            const tooLarge = resp.status === 413 || /too large|entity too large/i.test(raw);
+            statusEl.textContent = tooLarge
+                ? 'This upload is too large for the server to accept in one request. '
+                  + 'Try uploading fewer files at a time, or a lower-resolution/shorter series.'
+                : 'The server returned an unexpected response (status ' + resp.status + '). Please try again.';
+            return;
+        }
 
         if (resp.status === 409 && data.status === 'DUPLICATE') {
             uploadDlg.close();

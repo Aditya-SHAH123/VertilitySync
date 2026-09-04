@@ -298,7 +298,23 @@
 
         try {
             const resp = await fetch('/api/dicom/upload', { method: 'POST', body: formData });
-            const data = await resp.json();
+            const raw = await resp.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (parseErr) {
+                // The server (or a platform layer in front of it, e.g. a
+                // request-size limit) returned something other than JSON -
+                // most commonly a plain "Request Entity Too Large" body.
+                // Never let a raw JSON.parse error reach the user.
+                const tooLarge = resp.status === 413 || /too large|entity too large/i.test(raw);
+                errorBox.textContent = tooLarge
+                    ? 'This upload is too large for the server to accept in one request. '
+                      + 'Try uploading fewer files at a time, or a lower-resolution/shorter series.'
+                    : 'The server returned an unexpected response (status ' + resp.status + '). Please try again.';
+                errorBox.classList.add('visible');
+                return;
+            }
 
             if (!resp.ok) {
                 errorBox.textContent = (data.series_result && data.series_result.messages ? data.series_result.messages.join(' ') : null)
