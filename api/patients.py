@@ -391,3 +391,157 @@ def vital_signs_to_dict(row):
         "notes": row["notes"],
         "created_at": row["created_at"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Diagnoses (problem list)
+# ---------------------------------------------------------------------------
+# Every field is doctor-authored. diagnosis_name is always the doctor's own
+# wording; icd10_code/icd10_description (when present) come only from the
+# static lookup in api/icd10_reference.py - never inferred, never
+# AI-suggested. Status changes are appended to diagnosis_status_history
+# rather than overwriting anything, so the full history of a problem
+# (e.g. active -> resolved -> active again) is always reconstructable.
+
+DIAGNOSIS_STATUSES = ("active", "resolved", "chronic", "ruled_out")
+DIAGNOSIS_SEVERITIES = ("mild", "moderate", "severe", "unspecified")
+
+
+def create_diagnosis(patient_id, doctor_id, diagnosis_name, icd10_code=None,
+                      icd10_description=None, status="active", severity=None,
+                      onset_date=None, diagnosed_date=None, study_id=None,
+                      notes=None, path=None):
+    diagnosis_name = (diagnosis_name or "").strip()
+    if not diagnosis_name:
+        raise ValueError("A diagnosis name is required.")
+    if status not in DIAGNOSIS_STATUSES:
+        raise ValueError(f"status must be one of {DIAGNOSIS_STATUSES}")
+    if severity and severity not in DIAGNOSIS_SEVERITIES:
+        raise ValueError(f"severity must be one of {DIAGNOSIS_SEVERITIES}")
+
+    conn = get_db(path)
+    now = utc_now_iso()
+    cur = conn.execute(
+        "INSERT INTO diagnoses (patient_id, doctor_id, diagnosis_name, icd10_code, "
+        "icd10_description, status, severity, onset_date, diagnosed_date, study_id, "
+        "notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (patient_id, doctor_id, diagnosis_name, icd10_code or None, icd10_description or None,
+         status, severity or None, onset_date or None, diagnosed_date or now[:10],
+         study_id or None, (notes or "").strip() or None, now, now),
+    )
+    new_id = cur.fetchone()["id"]
+    # The history trail starts here, same shape as every later transition.
+    conn.execute(
+        "INSERT INTO diagnosis_status_history (diagnosis_id, doctor_id, old_status, "
+        "new_status, note, changed_at) VALUES (?, ?, NULL, ?, ?, ?)",
+        (new_id, doctor_id, status, "Diagnosis recorded.", now),
+    )
+    conn.commit()
+    return get_diagnosis(new_id, path=path)
+
+
+def get_diagnosis(diagnosis_id, path=None):
+    conn = get_db(path)
+    return conn.execute("SELECT * FROM diagnoses WHERE id = ?", (diagnosis_id,)).fetchone()
+
+
+def list_diagnoses(patient_id, status=None, path=None):
+    conn = get_db(path)
+    sql = "SELECT * FROM diagnoses WHERE patient_id = ?"
+    params = [patient_id]
+    if status is not None:
+        sql += " AND status = ?"
+        params.append(status)
+    sql += " ORDER BY diagnosed_date DESC, id DESC"
+    return conn.execute(sql, params).fetchall()
+
+
+def update_diagnosis(diagnosis_id, diagnosis_name=None, icd10_code=None, icd10_description=None,
+                      severity=None, onset_date=None, notes=None, study_id=None, path=None):
+    """Edits the doctor-authored fields. Does NOT change status - use
+    update_diagnosis_status() for that, so every status change is always
+    captured in the history table with no code path that can skip it."""
+    conn = get_db(path)
+    fields, params = [], []
+    if diagnosis_name is not None:
+        diagnosis_name = diagnosis_name.strip()
+        if not diagnosis_name:
+            raise ValueError("Diagnosis name cannot be empty.")
+        fields.append("diagnosis_name = ?"); params.append(diagnosis_name)
+    if icd10_code is not None:
+        fields.append("icd10_code = ?"); params.append(icd10_code or None)
+    if icd10_description is not None:
+        fields.append("icd10_description = ?"); params.append(icd10_description or None)
+    if severity is not None:
+        if severity and severity not in DIAGNOSIS_SEVERITIES:
+            raise ValueError(f"severity must be one of {DIAGNOSIS_SEVERITIES}")
+        fields.append("severity = ?"); params.append(severity or None)
+    if onset_date is not None:
+        fields.append("onset_date = ?"); params.append(onset_date or None)
+    if notes is not None:
+        fields.append("notes = ?"); params.append(notes.strip() or None)
+    if study_id is not None:
+        fields.append("study_id = ?"); params.append(study_id or None)
+    if not fields:
+        return get_diagnosis(diagnosis_id, path=path)
+    fields.append("updated_at = ?"); params.append(utc_now_iso())
+    params.append(diagnosis_id)
+    conn.execute(f"UPDATE diagnoses SET {', '.join(fields)} WHERE id = ?", params)
+    conn.commit()
+    return get_diagnosis(diagnosis_id, path=path)
+
+
+def update_diagnosis_status(diagnosis_id, doctor_id, new_status, note=None, path=None):
+    if new_status not in DIAGNOSIS_STATUSES:
+        raise ValueError(f"status must be one of {DIAGNOSIS_STATUSES}")
+    current = get_diagnosis(diagnosis_id, path=path)
+    if current is None:
+        raise KeyError(diagnosis_id)
+    conn = get_db(path)
+    now = utc_now_iso()
+    conn.execute("UPDATE diagnoses SET status = ?, updated_at = ? WHERE id = ?",
+                 (new_status, now, diagnosis_id))
+    conn.execute(
+        "INSERT INTO diagnosis_status_history (diagnosis_id, doctor_id, old_status, "
+        "new_status, note, changed_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (diagnosis_id, doctor_id, current["status"], new_status, (note or "").strip() or None, now),
+    )
+    conn.commit()
+    return get_diagnosis(diagnosis_id, path=path)
+
+
+def list_diagnosis_history(diagnosis_id, path=None):
+    conn = get_db(path)
+    return conn.execute(
+        "SELECT * FROM diagnosis_status_history WHERE diagnosis_id = ? ORDER BY changed_at DESC, id DESC",
+        (diagnosis_id,),
+    ).fetchall()
+
+
+def diagnosis_to_dict(row):
+    return {
+        "id": row["id"],
+        "patient_id": row["patient_id"],
+        "diagnosis_name": row["diagnosis_name"],
+        "icd10_code": row["icd10_code"],
+        "icd10_description": row["icd10_description"],
+        "status": row["status"],
+        "severity": row["severity"],
+        "onset_date": row["onset_date"],
+        "diagnosed_date": row["diagnosed_date"],
+        "study_id": row["study_id"],
+        "notes": row["notes"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def diagnosis_history_to_dict(row):
+    return {
+        "id": row["id"],
+        "diagnosis_id": row["diagnosis_id"],
+        "old_status": row["old_status"],
+        "new_status": row["new_status"],
+        "note": row["note"],
+        "changed_at": row["changed_at"],
+    }

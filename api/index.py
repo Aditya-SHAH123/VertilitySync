@@ -34,6 +34,7 @@ from overlay_render import render_overlay_png, band_profile, OVERLAY_BANDS  # no
 import db_engine as dbengine     # noqa: E402
 import measurements as measmod   # noqa: E402
 import patients as patientsmod   # noqa: E402
+import icd10_reference            # noqa: E402
 import ai_notes                  # noqa: E402
 import supa_auth as supabase_auth  # noqa: E402 - see supa_auth.py's docstring for the naming reason
 
@@ -2116,6 +2117,136 @@ def api_delete_vital_signs(vitals_id):
     dbmod.record_audit('vital_signs_deleted', doctor_id=doctor['id'],
                         target_type='vitals', target_id=vitals_id, ip=authmod.client_ip())
     return jsonify({'status': 'OK'})
+
+
+# ---------------------------------------------------------------------------
+# DIAGNOSES (PROBLEM LIST) API
+# ---------------------------------------------------------------------------
+# Every diagnosis is doctor-authored. icd10_code/icd10_description, when
+# present, come only from the static curated lookup in
+# api/icd10_reference.py - never AI-suggested, never inferred from imaging
+# or notes. Status changes go through update_diagnosis_status() only, so
+# every transition is captured in diagnosis_status_history.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/icd10/search', methods=['GET'])
+@authmod.api_login_required
+def api_icd10_search():
+    """Static-table search only - never touches patient data, an image, or
+    an AI model. See icd10_reference.py's module docstring."""
+    q = request.args.get('q', '')
+    return jsonify({'status': 'OK', 'results': icd10_reference.search_icd10(q)})
+
+
+def _get_owned_diagnosis_or_error(diagnosis_id):
+    """A diagnosis's authorization is derived from its patient's ownership -
+    there is no separate diagnosis-level grant, same convention as notes."""
+    doctor = authmod.current_doctor()
+    diagnosis = patientsmod.get_diagnosis(diagnosis_id)
+    if diagnosis is None:
+        return None, (jsonify({'status': 'NOT_FOUND'}), 404)
+    patient = patientsmod.get_patient(diagnosis['patient_id'])
+    if not authmod.doctor_can_access_patient(doctor['id'], patient):
+        return None, (jsonify({'status': 'NOT_FOUND'}), 404)
+    return diagnosis, None
+
+
+@app.route('/api/patients/<int:patient_id>/diagnoses', methods=['POST'])
+@authmod.api_login_required
+def api_create_diagnosis(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    doctor = authmod.current_doctor()
+    data = request.get_json(silent=True) or {}
+
+    study_id = data.get('study_id') or None
+    if study_id is not None:
+        study_record = patientsmod.get_study_record(study_id)
+        if study_record is None or study_record['patient_id'] != patient_id:
+            return jsonify({'status': 'FAIL', 'message': 'study_id does not belong to this patient.'}), 400
+
+    try:
+        diagnosis = patientsmod.create_diagnosis(
+            patient_id, doctor['id'], data.get('diagnosis_name'),
+            icd10_code=data.get('icd10_code'), icd10_description=data.get('icd10_description'),
+            status=data.get('status', 'active'), severity=data.get('severity'),
+            onset_date=data.get('onset_date'), diagnosed_date=data.get('diagnosed_date'),
+            study_id=study_id, notes=data.get('notes'),
+        )
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    dbmod.record_audit('diagnosis_created', doctor_id=doctor['id'],
+                        target_type='patient', target_id=patient_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'diagnosis': patientsmod.diagnosis_to_dict(diagnosis)}), 201
+
+
+@app.route('/api/patients/<int:patient_id>/diagnoses', methods=['GET'])
+@authmod.api_login_required
+def api_list_diagnoses(patient_id):
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        return err
+    status = request.args.get('status') or None
+    if status and status not in patientsmod.DIAGNOSIS_STATUSES:
+        return jsonify({'status': 'FAIL',
+                         'message': f'status must be one of {patientsmod.DIAGNOSIS_STATUSES}'}), 400
+    rows = patientsmod.list_diagnoses(patient_id, status=status)
+    return jsonify({'status': 'OK', 'diagnoses': [patientsmod.diagnosis_to_dict(r) for r in rows]})
+
+
+@app.route('/api/diagnoses/<int:diagnosis_id>', methods=['GET'])
+@authmod.api_login_required
+def api_get_diagnosis(diagnosis_id):
+    diagnosis, err = _get_owned_diagnosis_or_error(diagnosis_id)
+    if err:
+        return err
+    history = patientsmod.list_diagnosis_history(diagnosis_id)
+    return jsonify({
+        'status': 'OK',
+        'diagnosis': patientsmod.diagnosis_to_dict(diagnosis),
+        'history': [patientsmod.diagnosis_history_to_dict(h) for h in history],
+    })
+
+
+@app.route('/api/diagnoses/<int:diagnosis_id>', methods=['PUT'])
+@authmod.api_login_required
+def api_update_diagnosis(diagnosis_id):
+    diagnosis, err = _get_owned_diagnosis_or_error(diagnosis_id)
+    if err:
+        return err
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = patientsmod.update_diagnosis(
+            diagnosis_id,
+            diagnosis_name=data.get('diagnosis_name'), icd10_code=data.get('icd10_code'),
+            icd10_description=data.get('icd10_description'), severity=data.get('severity'),
+            onset_date=data.get('onset_date'), notes=data.get('notes'), study_id=data.get('study_id'),
+        )
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    doctor = authmod.current_doctor()
+    dbmod.record_audit('diagnosis_updated', doctor_id=doctor['id'],
+                        target_type='diagnosis', target_id=diagnosis_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'diagnosis': patientsmod.diagnosis_to_dict(updated)})
+
+
+@app.route('/api/diagnoses/<int:diagnosis_id>/status', methods=['POST'])
+@authmod.api_login_required
+def api_update_diagnosis_status(diagnosis_id):
+    diagnosis, err = _get_owned_diagnosis_or_error(diagnosis_id)
+    if err:
+        return err
+    doctor = authmod.current_doctor()
+    data = request.get_json(silent=True) or {}
+    try:
+        updated = patientsmod.update_diagnosis_status(
+            diagnosis_id, doctor['id'], data.get('status'), note=data.get('note'))
+    except ValueError as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
+    dbmod.record_audit('diagnosis_status_changed', doctor_id=doctor['id'],
+                        target_type='diagnosis', target_id=diagnosis_id, ip=authmod.client_ip())
+    return jsonify({'status': 'OK', 'diagnosis': patientsmod.diagnosis_to_dict(updated)})
 
 
 # ---------------------------------------------------------------------------

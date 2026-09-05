@@ -303,6 +303,43 @@ CREATE TABLE IF NOT EXISTS vital_signs (
     created_at             TEXT NOT NULL
 );
 
+-- Problem list. Every field here is doctor-authored; diagnosis_name is
+-- always the doctor's own wording even when an icd10_code is also
+-- attached. icd10_code/icd10_description come only from the static,
+-- curated lookup table in api/icd10_reference.py (never inferred,
+-- never AI-suggested) - a doctor searches it and picks a code, or skips
+-- it entirely and just types a diagnosis name.
+CREATE TABLE IF NOT EXISTS diagnoses (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    patient_id          INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    doctor_id           INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    diagnosis_name      TEXT NOT NULL,
+    icd10_code          TEXT,
+    icd10_description   TEXT,
+    status              TEXT NOT NULL DEFAULT 'active',
+    severity            TEXT,
+    onset_date          TEXT,
+    diagnosed_date      TEXT NOT NULL,
+    study_id            TEXT REFERENCES patient_studies(id) ON DELETE SET NULL,
+    notes               TEXT,
+    created_at          TEXT NOT NULL,
+    updated_at          TEXT NOT NULL
+);
+
+-- Every status transition is appended here, never overwritten - a real
+-- problem-list audit trail (when did this go from active to resolved,
+-- and who changed it), the same "history, not a single current value"
+-- principle already used for vital_signs.
+CREATE TABLE IF NOT EXISTS diagnosis_status_history (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    diagnosis_id        INTEGER NOT NULL REFERENCES diagnoses(id) ON DELETE CASCADE,
+    doctor_id           INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    old_status          TEXT,
+    new_status          TEXT NOT NULL,
+    note                TEXT,
+    changed_at          TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_cases_owner ON cases(owner_doctor_id);
 CREATE INDEX IF NOT EXISTS idx_case_access_doctor ON case_access(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_notes_case ON notes(case_id);
@@ -314,6 +351,9 @@ CREATE INDEX IF NOT EXISTS idx_patient_studies_uid ON patient_studies(study_inst
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_patient ON clinical_notes(patient_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_study ON clinical_notes(study_id);
 CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id);
+CREATE INDEX IF NOT EXISTS idx_diagnoses_patient ON diagnoses(patient_id);
+CREATE INDEX IF NOT EXISTS idx_diagnoses_status ON diagnoses(status);
+CREATE INDEX IF NOT EXISTS idx_diagnosis_history_diagnosis ON diagnosis_status_history(diagnosis_id);
 """
 
 # Postgres dialect: SERIAL, TIMESTAMPTZ, BOOLEAN. Kept in sync by hand with
@@ -430,6 +470,33 @@ CREATE TABLE IF NOT EXISTS vital_signs (
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS diagnoses (
+    id                  SERIAL PRIMARY KEY,
+    patient_id          INTEGER NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    doctor_id           INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    diagnosis_name      TEXT NOT NULL,
+    icd10_code          TEXT,
+    icd10_description   TEXT,
+    status              TEXT NOT NULL DEFAULT 'active',
+    severity            TEXT,
+    onset_date          TEXT,
+    diagnosed_date      TEXT NOT NULL,
+    study_id            TEXT REFERENCES patient_studies(id) ON DELETE SET NULL,
+    notes               TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS diagnosis_status_history (
+    id                  SERIAL PRIMARY KEY,
+    diagnosis_id        INTEGER NOT NULL REFERENCES diagnoses(id) ON DELETE CASCADE,
+    doctor_id           INTEGER NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
+    old_status          TEXT,
+    new_status          TEXT NOT NULL,
+    note                TEXT,
+    changed_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_cases_owner ON cases(owner_doctor_id);
 CREATE INDEX IF NOT EXISTS idx_case_access_doctor ON case_access(doctor_id);
 CREATE INDEX IF NOT EXISTS idx_notes_case ON notes(case_id);
@@ -441,6 +508,9 @@ CREATE INDEX IF NOT EXISTS idx_patient_studies_uid ON patient_studies(study_inst
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_patient ON clinical_notes(patient_id);
 CREATE INDEX IF NOT EXISTS idx_clinical_notes_study ON clinical_notes(study_id);
 CREATE INDEX IF NOT EXISTS idx_vital_signs_patient ON vital_signs(patient_id);
+CREATE INDEX IF NOT EXISTS idx_diagnoses_patient ON diagnoses(patient_id);
+CREATE INDEX IF NOT EXISTS idx_diagnoses_status ON diagnoses(status);
+CREATE INDEX IF NOT EXISTS idx_diagnosis_history_diagnosis ON diagnosis_status_history(diagnosis_id);
 """
 
 
@@ -483,7 +553,8 @@ def reset_db(path=None):
     against a real Postgres/Supabase database - it is only exercised by the
     test suite, which always uses SQLite (tests never set DATABASE_URL)."""
     conn = get_db(path)
-    for table in ("audit_log", "vital_signs", "clinical_notes", "patient_studies", "patients",
+    for table in ("audit_log", "diagnosis_status_history", "diagnoses", "vital_signs",
+                  "clinical_notes", "patient_studies", "patients",
                   "notes", "case_access", "cases", "doctors"):
         conn.execute(f"DROP TABLE IF EXISTS {table}")
     conn.commit()

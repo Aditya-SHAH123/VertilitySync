@@ -322,6 +322,112 @@ def main():
     r = client.get('/api/patients/' + str(patient_id) + '/vitals')
     check('vitals count drops after delete', len(r.get_json()['vitals']) == 1)
 
+    # ---------------- ICD-10 search (static table, no AI) ----------------
+    r = client.get('/api/icd10/search?q=fibrosis')
+    check('icd10 search for "fibrosis" -> 200', r.status_code == 200, r.status_code)
+    results = r.get_json()['results']
+    check('icd10 search finds pulmonary fibrosis codes', len(results) > 0, results)
+    check('icd10 result has code and description fields',
+          all('code' in x and 'description' in x for x in results))
+    r = client.get('/api/icd10/search?q=')
+    check('empty icd10 query returns no results (not the whole table)',
+          r.get_json()['results'] == [])
+    r = client.get('/api/icd10/search?q=zzzznomatch')
+    check('icd10 search with no match returns empty list', r.get_json()['results'] == [])
+
+    # ---------------- diagnoses (problem list) ----------------
+    r = client.post('/api/patients/' + str(patient_id) + '/diagnoses', json={
+        'diagnosis_name': 'Idiopathic pulmonary fibrosis', 'icd10_code': 'J84.112',
+        'icd10_description': 'Idiopathic pulmonary fibrosis', 'severity': 'moderate',
+        'onset_date': '2025-11-01', 'study_id': study_id_1,
+    })
+    check('create diagnosis -> 201', r.status_code == 201, (r.status_code, r.get_json()))
+    diagnosis = r.get_json()['diagnosis']
+    diagnosis_id = diagnosis['id']
+    check('new diagnosis defaults to active status', diagnosis['status'] == 'active')
+    check('new diagnosis has a diagnosed_date even though none was given',
+          bool(diagnosis['diagnosed_date']))
+    check('new diagnosis carries the linked study id', diagnosis['study_id'] == study_id_1)
+
+    r = client.post('/api/patients/' + str(patient_id) + '/diagnoses', json={'diagnosis_name': '  '})
+    check('empty diagnosis name rejected -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post('/api/patients/' + str(patient_id) + '/diagnoses',
+                     json={'diagnosis_name': 'Something', 'severity': 'catastrophic'})
+    check('invalid severity value rejected -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post('/api/patients/' + str(patient_id) + '/diagnoses',
+                     json={'diagnosis_name': 'Wrong study', 'study_id': 'not-a-real-study-id'})
+    check('diagnosis referencing a study_id outside this patient -> 400', r.status_code == 400, r.status_code)
+
+    # A diagnosis with no ICD-10 code at all must still be valid - the
+    # doctor's own wording is the only required field.
+    r = client.post('/api/patients/' + str(patient_id) + '/diagnoses',
+                     json={'diagnosis_name': "Doctor's own free-text diagnosis, no code"})
+    check('diagnosis with no ICD-10 code is still valid -> 201', r.status_code == 201, r.status_code)
+    freetext_diagnosis_id = r.get_json()['diagnosis']['id']
+    check('free-text diagnosis has no icd10 code', r.get_json()['diagnosis']['icd10_code'] is None)
+
+    r = client.get('/api/patients/' + str(patient_id) + '/diagnoses')
+    check('diagnoses listing has both entries', len(r.get_json()['diagnoses']) == 2)
+
+    r = client.get('/api/patients/' + str(patient_id) + '/diagnoses?status=active')
+    check('filter by status=active returns both (both default active)',
+          len(r.get_json()['diagnoses']) == 2)
+    r = client.get('/api/patients/' + str(patient_id) + '/diagnoses?status=resolved')
+    check('filter by status=resolved returns none yet', r.get_json()['diagnoses'] == [])
+    r = client.get('/api/patients/' + str(patient_id) + '/diagnoses?status=not-a-real-status')
+    check('invalid status filter -> 400', r.status_code == 400, r.status_code)
+
+    # ---------------- diagnosis detail + initial history ----------------
+    r = client.get('/api/diagnoses/' + str(diagnosis_id))
+    check('get diagnosis detail -> 200', r.status_code == 200, r.status_code)
+    check('detail includes the initial history entry', len(r.get_json()['history']) == 1)
+    check('initial history entry has old_status None and new_status active',
+          r.get_json()['history'][0]['old_status'] is None
+          and r.get_json()['history'][0]['new_status'] == 'active')
+
+    # ---------------- editing doctor-authored fields ----------------
+    r = client.put('/api/diagnoses/' + str(diagnosis_id), json={'severity': 'severe', 'notes': 'Progressing.'})
+    check('update diagnosis fields -> 200', r.status_code == 200, r.status_code)
+    check('severity actually changed', r.get_json()['diagnosis']['severity'] == 'severe')
+    check('status is untouched by a plain field edit', r.get_json()['diagnosis']['status'] == 'active')
+
+    r = client.put('/api/diagnoses/' + str(diagnosis_id), json={'diagnosis_name': '   '})
+    check('editing to an empty diagnosis name is rejected -> 400', r.status_code == 400, r.status_code)
+
+    # ---------------- status lifecycle + history trail ----------------
+    r = client.post('/api/diagnoses/' + str(diagnosis_id) + '/status',
+                     json={'status': 'resolved', 'note': 'Resolved after treatment course.'})
+    check('status transition to resolved -> 200', r.status_code == 200, r.status_code)
+    check('diagnosis now shows resolved', r.get_json()['diagnosis']['status'] == 'resolved')
+
+    r = client.get('/api/diagnoses/' + str(diagnosis_id))
+    check('history now has two entries (recorded + resolved)', len(r.get_json()['history']) == 2)
+    latest = r.get_json()['history'][0]
+    check('most recent history entry captures the transition correctly',
+          latest['old_status'] == 'active' and latest['new_status'] == 'resolved'
+          and latest['note'] == 'Resolved after treatment course.', latest)
+
+    r = client.post('/api/diagnoses/' + str(diagnosis_id) + '/status', json={'status': 'not-a-real-status'})
+    check('invalid status transition -> 400', r.status_code == 400, r.status_code)
+
+    r = client.get('/api/patients/' + str(patient_id) + '/diagnoses?status=resolved')
+    check('status filter now finds the resolved diagnosis', len(r.get_json()['diagnoses']) == 1)
+    r = client.get('/api/patients/' + str(patient_id) + '/diagnoses?status=active')
+    check('active filter now only shows the free-text one', len(r.get_json()['diagnoses']) == 1
+          and r.get_json()['diagnoses'][0]['id'] == freetext_diagnosis_id)
+
+    # ---------------- authorization ----------------
+    r = other_client.get('/api/diagnoses/' + str(diagnosis_id))
+    check("another doctor cannot read this diagnosis -> 404", r.status_code == 404, r.status_code)
+    r = other_client.put('/api/diagnoses/' + str(diagnosis_id), json={'severity': 'mild'})
+    check("another doctor cannot edit this diagnosis -> 404", r.status_code == 404, r.status_code)
+    r = other_client.post('/api/diagnoses/' + str(diagnosis_id) + '/status', json={'status': 'chronic'})
+    check("another doctor cannot change this diagnosis's status -> 404", r.status_code == 404, r.status_code)
+    r = other_client.get('/api/patients/' + str(patient_id) + '/diagnoses')
+    check("another doctor's diagnoses listing on this patient -> 404", r.status_code == 404, r.status_code)
+
     # ---------------- archive ----------------
     r = client.post('/api/patients/' + str(patient_id) + '/archive', json={'archived': True})
     check('archive patient -> 200', r.status_code == 200, r.status_code)

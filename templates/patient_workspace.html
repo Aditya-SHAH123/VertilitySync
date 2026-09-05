@@ -47,6 +47,48 @@
     .vitals-note { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
     #vitalsDlg { width: min(480px, 94vw); }
     .vitals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+
+    .dx-filters { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+    .dx-filters button { background: #f2f2f3; color: var(--muted); border: 1px solid var(--line);
+                          border-radius: 100px; padding: 5px 13px; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+    .dx-filters button:hover { color: var(--text); }
+    .dx-filters button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    .dx-card { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+    .dx-card:last-child { border-bottom: none; }
+    .dx-top-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .dx-name { font-weight: 650; font-size: 0.92rem; }
+    .dx-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem;
+               color: var(--muted); background: var(--bg); border: 1px solid var(--line);
+               border-radius: 5px; padding: 1px 7px; margin-left: 8px; }
+    .dx-pill { display: inline-block; padding: 2px 10px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
+    .dx-pill.active { background: var(--accent-soft); color: var(--accent); }
+    .dx-pill.chronic { background: #fdf0dc; color: var(--warn); }
+    .dx-pill.resolved { background: var(--ok-soft); color: var(--ok); }
+    .dx-pill.ruled_out { background: #f2f2f3; color: var(--muted); }
+    .dx-meta { font-size: 0.78rem; color: var(--muted); margin-top: 5px; }
+    .dx-notes { font-size: 0.85rem; margin-top: 6px; white-space: pre-wrap; }
+    .dx-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    .dx-actions select { font-size: 0.78rem; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); }
+    .dx-history-toggle { font-size: 0.76rem; color: var(--accent); cursor: pointer; margin-top: 8px; display: inline-block; }
+    .dx-history { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+    .dx-history.open { display: block; }
+    .dx-history-row { font-size: 0.78rem; color: var(--muted); padding: 4px 0; }
+    .dx-history-row b { color: var(--text); }
+
+    #diagnosisDlg { width: min(520px, 94vw); }
+    #icd10Results { position: relative; }
+    .icd10-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--panel);
+                       border: 1px solid var(--line); border-radius: 8px; max-height: 200px; overflow-y: auto;
+                       z-index: 5; box-shadow: 0 6px 20px rgba(0,0,0,0.12); display: none; }
+    .icd10-dropdown.open { display: block; }
+    .icd10-option { padding: 8px 12px; font-size: 0.82rem; cursor: pointer; }
+    .icd10-option:hover { background: var(--accent-soft); }
+    .icd10-option .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent); margin-right: 6px; }
+    .icd10-selected { display: none; align-items: center; gap: 8px; background: var(--accent-soft);
+                       border-radius: 8px; padding: 8px 12px; margin-top: 6px; font-size: 0.82rem; }
+    .icd10-selected.visible { display: flex; }
+    .icd10-selected button { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; }
 </style>
 
 <div class="p-head">
@@ -60,6 +102,7 @@
     <div class="p-actions">
         <button class="btn btn-sub" id="uploadBtn">Upload Scan</button>
         <button class="btn btn-sub" id="addVitalsBtn">Add Vitals</button>
+        <button class="btn btn-sub" id="addDiagnosisBtn">Add Diagnosis</button>
         <button class="btn btn-primary" id="addNoteBtn">Add Note</button>
     </div>
 </div>
@@ -68,6 +111,7 @@
     <button class="on" data-tab="overview">Overview</button>
     <button data-tab="imaging">Imaging</button>
     <button data-tab="vitals">Vitals</button>
+    <button data-tab="diagnoses">Diagnoses</button>
     <button data-tab="notes">Notes</button>
 </div>
 
@@ -75,6 +119,7 @@
     <div class="stat-strip">
         <div class="s"><div class="n" id="ovScanCount">—</div><div class="l">Total Scans</div></div>
         <div class="s"><div class="n" id="ovLastScan">—</div><div class="l">Latest Scan</div></div>
+        <div class="s"><div class="n" id="ovActiveDx">—</div><div class="l">Active Diagnoses</div></div>
     </div>
     <div class="panel" style="padding:16px;margin-bottom:16px;">
         <h3 style="font-size:0.86rem;margin-bottom:10px;">Latest Vitals</h3>
@@ -92,6 +137,19 @@
 
 <div class="tab-panel panel" id="tab-vitals" hidden style="padding:4px 0;">
     <div id="vitalsHistory"></div>
+</div>
+
+<div class="tab-panel" id="tab-diagnoses" hidden>
+    <div class="dx-filters" id="dxFilters">
+        <button class="on" data-status="">All</button>
+        <button data-status="active">Active</button>
+        <button data-status="chronic">Chronic</button>
+        <button data-status="resolved">Resolved</button>
+        <button data-status="ruled_out">Ruled Out</button>
+    </div>
+    <div class="panel" style="padding:4px 0;">
+        <div id="diagnosesList"></div>
+    </div>
 </div>
 
 <div class="tab-panel panel" id="tab-notes" hidden>
@@ -164,6 +222,54 @@
     </div>
 </dialog>
 
+<dialog id="diagnosisDlg">
+    <h2>Add Diagnosis</h2>
+    <p style="font-size:0.82rem;color:var(--muted);margin:0 0 12px;">
+        Type your own diagnosis. Attaching an ICD-10 code is optional — search below or leave it out.
+    </p>
+    <label for="dxName">Diagnosis</label>
+    <input type="text" id="dxName" maxlength="255" placeholder="e.g. Idiopathic pulmonary fibrosis" required>
+
+    <label for="icd10Search">ICD-10 code (optional)</label>
+    <div id="icd10Results">
+        <input type="text" id="icd10Search" placeholder="Search by code or description…" autocomplete="off">
+        <div class="icd10-dropdown" id="icd10Dropdown"></div>
+    </div>
+    <div class="icd10-selected" id="icd10Selected">
+        <span class="code" id="icd10SelectedCode"></span>
+        <span id="icd10SelectedDesc"></span>
+        <button type="button" id="icd10Clear">Remove</button>
+    </div>
+
+    <div class="vitals-grid" style="margin-top:12px;">
+        <div>
+            <label for="dxSeverity">Severity</label>
+            <select id="dxSeverity">
+                <option value="">Unspecified</option>
+                <option value="mild">Mild</option>
+                <option value="moderate">Moderate</option>
+                <option value="severe">Severe</option>
+            </select>
+        </div>
+        <div>
+            <label for="dxOnsetDate">Onset date (optional)</label>
+            <input type="date" id="dxOnsetDate">
+        </div>
+    </div>
+
+    <label for="dxStudyLink">Supporting scan (optional)</label>
+    <select id="dxStudyLink"><option value="">None</option></select>
+
+    <label for="dxNotes">Clinical notes (optional)</label>
+    <textarea id="dxNotes" maxlength="2000" style="min-height:70px;"></textarea>
+
+    <div class="field-error" id="dxError"></div>
+    <div class="dlg-actions">
+        <button type="button" class="btn btn-sub" id="cancelDiagnosis">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveDiagnosis">Save Diagnosis</button>
+    </div>
+</dialog>
+
 <dialog id="noteDlg">
     <h2 id="noteDlgTitle">Note</h2>
     <div id="noteComposeSection">
@@ -225,7 +331,7 @@
         b.addEventListener('click', function () {
             document.querySelectorAll('.tabs button').forEach(function (x) { x.classList.remove('on'); });
             b.classList.add('on');
-            ['overview', 'imaging', 'vitals', 'notes'].forEach(function (t) {
+            ['overview', 'imaging', 'vitals', 'diagnoses', 'notes'].forEach(function (t) {
                 document.getElementById('tab-' + t).hidden = (t !== b.getAttribute('data-tab'));
             });
         });
@@ -346,6 +452,184 @@
         if (!resp.ok) { errEl.textContent = data.message || 'Could not save vitals.'; return; }
         vitalsDlg.close();
         loadVitals();
+    });
+
+    // ---------------- diagnoses (problem list) ----------------
+    let dxFilterStatus = '';
+    let selectedIcd10 = null;
+
+    function fmtDateOnly(iso) {
+        if (!iso) return null;
+        try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+        catch (e) { return iso; }
+    }
+
+    const STATUS_LABELS = { active: 'Active', chronic: 'Chronic', resolved: 'Resolved', ruled_out: 'Ruled Out' };
+
+    async function loadDiagnoses() {
+        const params = new URLSearchParams();
+        if (dxFilterStatus) params.set('status', dxFilterStatus);
+        const resp = await fetch('/api/patients/' + patientId + '/diagnoses?' + params.toString());
+        const data = await resp.json();
+        renderDiagnoses(data.diagnoses || []);
+
+        // Overview count always reflects ALL active diagnoses, independent of the tab's filter.
+        const activeResp = await fetch('/api/patients/' + patientId + '/diagnoses?status=active');
+        const activeData = await activeResp.json();
+        document.getElementById('ovActiveDx').textContent = (activeData.diagnoses || []).length;
+    }
+
+    function renderDiagnoses(diagnoses) {
+        const el = document.getElementById('diagnosesList');
+        if (!diagnoses.length) {
+            el.innerHTML = '<div class="empty"><p>No diagnoses recorded' + (dxFilterStatus ? ' for this filter' : ' yet') + '.</p>' +
+                (dxFilterStatus ? '' : '<button class="btn btn-primary" id="emptyDx">Add Diagnosis</button>') + '</div>';
+            const b = document.getElementById('emptyDx');
+            if (b) b.addEventListener('click', function () { openDiagnosisDlg(); });
+            return;
+        }
+        el.innerHTML = diagnoses.map(function (d) {
+            const study = studies.find(function (s) { return s.id === d.study_id; });
+            return '<div class="dx-card" data-id="' + d.id + '">' +
+                '<div class="dx-top-row">' +
+                '<div><span class="dx-name">' + esc(d.diagnosis_name) + '</span>' +
+                (d.icd10_code ? '<span class="dx-code">' + esc(d.icd10_code) + '</span>' : '') + '</div>' +
+                '<span class="dx-pill ' + d.status + '">' + STATUS_LABELS[d.status] + '</span>' +
+                '</div>' +
+                '<div class="dx-meta">' +
+                (d.severity ? esc(d.severity.charAt(0).toUpperCase() + d.severity.slice(1)) + ' · ' : '') +
+                'Diagnosed ' + fmtDateOnly(d.diagnosed_date) +
+                (d.onset_date ? ' · Onset ' + fmtDateOnly(d.onset_date) : '') +
+                (study ? ' · <a href="/viewer/' + esc(study.id) + '" style="color:var(--accent);">Supporting scan</a>' : '') +
+                '</div>' +
+                (d.notes ? '<div class="dx-notes">' + esc(d.notes) + '</div>' : '') +
+                '<div class="dx-actions">' +
+                '<select data-status-for="' + d.id + '">' +
+                Object.keys(STATUS_LABELS).map(function (s) {
+                    return '<option value="' + s + '"' + (s === d.status ? ' selected' : '') + '>' + STATUS_LABELS[s] + '</option>';
+                }).join('') + '</select>' +
+                '</div>' +
+                '<span class="dx-history-toggle" data-history-for="' + d.id + '">View history</span>' +
+                '<div class="dx-history" id="dx-history-' + d.id + '"></div>' +
+                '</div>';
+        }).join('');
+
+        el.querySelectorAll('[data-status-for]').forEach(function (sel) {
+            sel.addEventListener('change', async function () {
+                const id = sel.getAttribute('data-status-for');
+                const resp = await fetch('/api/diagnoses/' + id + '/status', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: sel.value }),
+                });
+                if (resp.ok) loadDiagnoses();
+            });
+        });
+        el.querySelectorAll('[data-history-for]').forEach(function (toggle) {
+            toggle.addEventListener('click', async function () {
+                const id = toggle.getAttribute('data-history-for');
+                const histEl = document.getElementById('dx-history-' + id);
+                const isOpen = histEl.classList.contains('open');
+                if (isOpen) { histEl.classList.remove('open'); toggle.textContent = 'View history'; return; }
+                const resp = await fetch('/api/diagnoses/' + id);
+                const data = await resp.json();
+                histEl.innerHTML = (data.history || []).map(function (h) {
+                    return '<div class="dx-history-row">' +
+                        (h.old_status ? esc(STATUS_LABELS[h.old_status] || h.old_status) + ' → ' : '') +
+                        '<b>' + esc(STATUS_LABELS[h.new_status] || h.new_status) + '</b>' +
+                        ' — ' + fmtDateOnly(h.changed_at) +
+                        (h.note ? ': ' + esc(h.note) : '') + '</div>';
+                }).join('') || '<div class="dx-history-row">No history.</div>';
+                histEl.classList.add('open');
+                toggle.textContent = 'Hide history';
+            });
+        });
+    }
+
+    document.querySelectorAll('#dxFilters button').forEach(function (b) {
+        b.addEventListener('click', function () {
+            document.querySelectorAll('#dxFilters button').forEach(function (x) { x.classList.remove('on'); });
+            b.classList.add('on');
+            dxFilterStatus = b.getAttribute('data-status');
+            loadDiagnoses();
+        });
+    });
+
+    const diagnosisDlg = document.getElementById('diagnosisDlg');
+    function openDiagnosisDlg() {
+        document.getElementById('dxName').value = '';
+        document.getElementById('icd10Search').value = '';
+        document.getElementById('dxSeverity').value = '';
+        document.getElementById('dxOnsetDate').value = '';
+        document.getElementById('dxNotes').value = '';
+        document.getElementById('dxError').textContent = '';
+        selectedIcd10 = null;
+        document.getElementById('icd10Selected').classList.remove('visible');
+        document.getElementById('icd10Dropdown').classList.remove('open');
+
+        const studySelect = document.getElementById('dxStudyLink');
+        studySelect.innerHTML = '<option value="">None</option>' + studies.map(function (s) {
+            return '<option value="' + esc(s.id) + '">' + esc(s.modality || 'CT') + ' — ' + fmtDateOnly(s.scan_date || s.created_at) + '</option>';
+        }).join('');
+
+        diagnosisDlg.showModal();
+    }
+    document.getElementById('addDiagnosisBtn').addEventListener('click', openDiagnosisDlg);
+    document.getElementById('cancelDiagnosis').addEventListener('click', function () { diagnosisDlg.close(); });
+
+    let icd10Timer = null;
+    document.getElementById('icd10Search').addEventListener('input', function () {
+        const q = this.value.trim();
+        clearTimeout(icd10Timer);
+        const dropdown = document.getElementById('icd10Dropdown');
+        if (!q) { dropdown.classList.remove('open'); return; }
+        icd10Timer = setTimeout(async function () {
+            const resp = await fetch('/api/icd10/search?q=' + encodeURIComponent(q));
+            const data = await resp.json();
+            const results = data.results || [];
+            if (!results.length) { dropdown.classList.remove('open'); return; }
+            dropdown.innerHTML = results.map(function (r) {
+                return '<div class="icd10-option" data-code="' + esc(r.code) + '" data-desc="' + esc(r.description) + '">' +
+                    '<span class="code">' + esc(r.code) + '</span>' + esc(r.description) + '</div>';
+            }).join('');
+            dropdown.classList.add('open');
+            dropdown.querySelectorAll('.icd10-option').forEach(function (opt) {
+                opt.addEventListener('click', function () {
+                    selectedIcd10 = { code: opt.getAttribute('data-code'), description: opt.getAttribute('data-desc') };
+                    document.getElementById('icd10SelectedCode').textContent = selectedIcd10.code;
+                    document.getElementById('icd10SelectedDesc').textContent = selectedIcd10.description;
+                    document.getElementById('icd10Selected').classList.add('visible');
+                    document.getElementById('icd10Search').value = '';
+                    dropdown.classList.remove('open');
+                });
+            });
+        }, 200);
+    });
+    document.getElementById('icd10Clear').addEventListener('click', function () {
+        selectedIcd10 = null;
+        document.getElementById('icd10Selected').classList.remove('visible');
+    });
+
+    document.getElementById('saveDiagnosis').addEventListener('click', async function () {
+        const name = document.getElementById('dxName').value.trim();
+        const errEl = document.getElementById('dxError');
+        if (!name) { errEl.textContent = 'A diagnosis name is required.'; return; }
+        const payload = {
+            diagnosis_name: name,
+            icd10_code: selectedIcd10 ? selectedIcd10.code : null,
+            icd10_description: selectedIcd10 ? selectedIcd10.description : null,
+            severity: document.getElementById('dxSeverity').value || null,
+            onset_date: document.getElementById('dxOnsetDate').value || null,
+            study_id: document.getElementById('dxStudyLink').value || null,
+            notes: document.getElementById('dxNotes').value.trim() || null,
+        };
+        const resp = await fetch('/api/patients/' + patientId + '/diagnoses', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) { errEl.textContent = data.message || 'Could not save diagnosis.'; return; }
+        diagnosisDlg.close();
+        loadDiagnoses();
     });
 
     // ---------------- notes ----------------
@@ -511,7 +795,7 @@
         loadPatient();
     });
 
-    loadPatient();
+    loadPatient().then(function () { loadDiagnoses(); });
     loadVitals();
     loadNotes();
 })();
