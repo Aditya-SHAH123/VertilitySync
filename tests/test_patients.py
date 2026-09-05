@@ -117,6 +117,18 @@ def main():
     r = client.get('/patients/' + str(patient_id))
     check('patient workspace page loads for the owner', r.status_code == 200, r.status_code)
 
+    # ---------------- recent activity feed (home page) ----------------
+    r = client.get('/home')
+    check('home page reflects the patient-created activity',
+          r.status_code == 200 and b'Created patient record' in r.data and b'Sarah Miller' in r.data,
+          r.status_code)
+    r = client.get('/patients/' + str(patient_id))  # generates a 'patient_opened' event
+    r = client.get('/home')
+    check('home page reflects the patient-opened activity', b'Opened patient' in r.data)
+    r = other_client.get('/home')
+    check("another doctor's activity feed does not show this patient's name",
+          b'Sarah Miller' not in r.data)
+
     # ---------------- authorization: another doctor cannot reach this patient ----------------
     r = other_client.get('/api/patients/' + str(patient_id))
     check("another doctor's GET on this patient -> 404 (not 403)", r.status_code == 404, r.status_code)

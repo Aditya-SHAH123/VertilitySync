@@ -19,6 +19,13 @@
     .row-item:hover { background: #fafafb; }
     .row-item .t1 { font-size: 0.87rem; font-weight: 600; }
     .row-item .t2 { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    .activity-panel { margin-top: 22px; }
+    .activity-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+                    padding: 11px 16px; border-bottom: 1px solid var(--line); }
+    .activity-row:last-child { border-bottom: none; }
+    .activity-text { font-size: 0.85rem; }
+    .activity-text a { color: var(--accent); font-weight: 600; }
+    .activity-time { font-size: 0.76rem; color: var(--dim); white-space: nowrap; }
 </style>
 
 <div class="greeting"><span id="greetingText">Welcome back</span>, Dr. {{ doctor_name.split(' ')[0] if doctor_name else doctor_name }}
@@ -68,4 +75,41 @@
         {% endif %}
     </div>
 </div>
+
+<div class="panel activity-panel">
+    <div class="section-head" style="padding:16px 16px 0;"><h3>Recent Activity</h3></div>
+    {% if recent_activity %}
+        {% for a in recent_activity %}
+        <div class="activity-row">
+            <div class="activity-text">
+                {{ a.label }}{% if a.detail %} —
+                    {% if a.link %}<a href="{{ a.link }}">{{ a.detail }}</a>{% else %}{{ a.detail }}{% endif %}
+                {% endif %}
+            </div>
+            <div class="activity-time" data-ts="{{ a.ts }}">{{ a.ts[:10] }}</div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty"><p>No activity yet.</p></div>
+    {% endif %}
+</div>
+
+<script>
+    // Relative time, computed client-side (same reasoning as the greeting
+    // above - the doctor's own clock, not the server's).
+    (function () {
+        document.querySelectorAll('.activity-time[data-ts]').forEach(function (el) {
+            const then = new Date(el.getAttribute('data-ts'));
+            if (isNaN(then)) return;
+            const mins = Math.round((Date.now() - then.getTime()) / 60000);
+            let text;
+            if (mins < 1) text = 'Just now';
+            else if (mins < 60) text = mins + ' min ago';
+            else if (mins < 1440) text = Math.round(mins / 60) + ' hr ago';
+            else if (mins < 10080) text = Math.round(mins / 1440) + ' d ago';
+            else text = then.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            el.textContent = text;
+        });
+    })();
+</script>
 {% endblock %}

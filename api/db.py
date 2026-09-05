@@ -577,3 +577,48 @@ def record_audit(event, doctor_id=None, target_type=None, target_id=None,
          str(target_id) if target_id is not None else None, outcome, ip),
     )
     conn.commit()
+
+
+# Events worth surfacing to the doctor on their home page, and how to
+# phrase them. Auth/security noise (login, login_failed, *_denied,
+# *_failed) is deliberately excluded here - it stays in the raw audit_log
+# for security review (see manage.py audit), it just isn't "activity."
+ACTIVITY_EVENT_LABELS = {
+    "patient_created": "Created patient record",
+    "patient_opened": "Opened patient",
+    "patient_archived": "Archived patient",
+    "patient_unarchived": "Restored patient",
+    "imaging_study_imported": "Imported a scan",
+    "imaging_study_opened": "Opened a scan",
+    "note_created": "Added a note",
+    "note_updated": "Updated a note",
+    "diagnosis_created": "Recorded a diagnosis",
+    "diagnosis_updated": "Updated a diagnosis",
+    "diagnosis_status_changed": "Changed a diagnosis status",
+    "vital_signs_recorded": "Recorded vitals",
+    "vital_signs_deleted": "Removed a vitals entry",
+    "case_created": "Created case",
+    "case_accessed": "Opened case",
+    "case_status_changed": "Changed case status",
+}
+
+
+def list_recent_activity(doctor_id, limit=8, path=None):
+    """Recent doctor-facing activity for the home page - a thin, readable
+    slice of audit_log, not a new tracking mechanism. Only successful
+    events of a type in ACTIVITY_EVENT_LABELS are returned; the full log
+    (including denials/failures) remains available via manage.py audit."""
+    conn = get_db(path)
+    placeholders = ", ".join("?" for _ in ACTIVITY_EVENT_LABELS)
+    rows = conn.execute(
+        f"SELECT ts, event, target_type, target_id FROM audit_log "
+        f"WHERE doctor_id = ? AND outcome = 'success' AND event IN ({placeholders}) "
+        f"ORDER BY ts DESC LIMIT ?",
+        [doctor_id, *ACTIVITY_EVENT_LABELS.keys(), limit],
+    ).fetchall()
+    return [{
+        "ts": r["ts"],
+        "label": ACTIVITY_EVENT_LABELS.get(r["event"], r["event"]),
+        "target_type": r["target_type"],
+        "target_id": r["target_id"],
+    } for r in rows]

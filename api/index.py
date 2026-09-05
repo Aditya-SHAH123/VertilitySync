@@ -302,11 +302,29 @@ def doctor_home_page():
         'modality': s['modality'] or 'CT', 'created_at': s['created_at'],
     } for p, s in all_studies[:5]]
 
+    # Recent activity: a thin, readable slice of the audit log that's been
+    # recording almost every action all along - not a new tracking system,
+    # just the first time it's surfaced to the doctor instead of only
+    # being queryable via manage.py audit. Patient-typed entries are
+    # enriched with the patient's current name/link; other target types
+    # are shown without one rather than guessing.
+    patients_by_id = {p['id']: p for p in patients}
+    recent_activity = []
+    for ev in dbmod.list_recent_activity(doctor['id'], limit=8):
+        entry = {'label': ev['label'], 'ts': ev['ts'], 'link': None, 'detail': None}
+        if ev['target_type'] == 'patient' and ev['target_id']:
+            p = patients_by_id.get(int(ev['target_id']))
+            if p is not None:
+                entry['detail'] = f"{p['first_name']} {p['last_name']}"
+                entry['link'] = f"/patients/{p['id']}"
+        recent_activity.append(entry)
+
     return render_template('home.html', doctor_name=doctor['display_name'],
                             patient_count=len(patients),
                             recent_scan_count=len(all_studies),
                             recent_patients=recent_patients,
-                            recent_imaging=recent_imaging)
+                            recent_imaging=recent_imaging,
+                            recent_activity=recent_activity)
 
 
 @app.route('/patients')
