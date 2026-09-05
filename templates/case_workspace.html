@@ -1,95 +1,52 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ case.case_ref }} — VitalitySync</title>
-    <style>
-        /* Clinical design system - matches cases.html. No marketing media. */
-        :root {
-            --bg: #0b0f16; --panel: #131923; --panel2: #171e2a; --line: #1f2836;
-            --text: #e6ebf2; --muted: #8b98ab; --dim: #64728a; --accent: #3b82f6;
-            --ok: #34d399; --warn: #fbbf24; --info: #60a5fa; --off: #64748b;
-        }
-        * { box-sizing: border-box; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px;
-               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        a { color: inherit; text-decoration: none; }
+{% extends "clinical_light_base.html" %}
+{% block title %}{{ case.case_ref }} — VitalitySync{% endblock %}
+{% block extra_style %}
+    .crumb { font-size: 0.82rem; color: var(--muted); margin-bottom: 14px; }
+    .crumb a:hover { color: var(--text); }
+    .cw-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+    .ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--dim); }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
+    .pill.needs_review { background: var(--warn-soft); color: var(--warn); }
+    .pill.processing { background: var(--accent-soft); color: var(--accent); }
+    .pill.ready { background: var(--ok-soft); color: var(--ok); }
+    .pill.archived { background: #f2f2f3; color: var(--muted); }
+    .demo-tag { font-size: 0.66rem; color: var(--dim); border: 1px solid var(--line);
+                border-radius: 4px; padding: 1px 6px; margin-left: 7px; }
 
-        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-                  padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
-        .brand { display: flex; align-items: center; gap: 9px; }
-        .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(140deg, #3b82f6, #1e40af); }
-        .brand .name { font-weight: 650; font-size: 0.9rem; }
-        .crumb { font-size: 0.82rem; color: var(--muted); }
-        .crumb a:hover { color: var(--text); }
-        .who { display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: var(--muted); }
-        .who a:hover { color: var(--text); }
+    .pane { display: none; }
+    .pane.on { display: block; }
 
-        .head { padding: 16px 22px; border-bottom: 1px solid var(--line); display: flex;
-                align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-        h1 { font-size: 1.1rem; margin: 0 0 5px; font-weight: 650; }
-        .ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.78rem; color: var(--dim); }
-        .pill { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
-        .pill.needs_review { background: #422006; color: var(--warn); }
-        .pill.processing { background: #172554; color: var(--info); }
-        .pill.ready { background: #052e21; color: var(--ok); }
-        .pill.archived { background: #1e293b; color: var(--off); }
-        .demo-tag { font-size: 0.66rem; color: var(--dim); border: 1px solid var(--line);
-                    border-radius: 4px; padding: 1px 6px; margin-left: 7px; }
+    .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+    .card .k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--dim); }
+    .card .v { font-size: 0.95rem; font-weight: 600; margin-top: 5px; }
 
-        .btn { border: none; border-radius: 6px; padding: 7px 14px; font-size: 0.82rem; font-weight: 600;
-               cursor: pointer; font-family: inherit; display: inline-block; }
-        .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-sub { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
-        .btn-sub:hover { color: var(--text); }
+    .notice { background: var(--accent-soft); border: 1px solid var(--line); color: #044a7a; border-radius: 8px;
+              padding: 11px 14px; font-size: 0.82rem; line-height: 1.55; margin-bottom: 16px; }
+    .muted-box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+                 padding: 34px 20px; text-align: center; color: var(--muted); font-size: 0.87rem; }
 
-        .tabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--line); background: var(--panel); }
-        .tabs button { background: none; border: none; color: var(--muted); font-family: inherit;
-                       font-size: 0.85rem; padding: 11px 14px; cursor: pointer; border-bottom: 2px solid transparent; }
-        .tabs button:hover { color: var(--text); }
-        .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+    textarea { width: 100%; min-height: 92px; background: var(--bg); border: 1px solid var(--line);
+               color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 0.87rem;
+               font-family: inherit; resize: vertical; }
+    textarea:focus { outline: none; border-color: var(--accent); }
 
-        .pane { display: none; padding: 20px 22px 60px; }
-        .pane.on { display: block; }
+    .note { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+            padding: 13px 15px; margin-bottom: 10px; }
+    .note .meta { font-size: 0.72rem; color: var(--dim); margin-bottom: 7px; }
+    .note .body { font-size: 0.87rem; white-space: pre-wrap; line-height: 1.6; color: var(--text); }
 
-        .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-        .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
-        .card .k { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--dim); }
-        .card .v { font-size: 0.95rem; font-weight: 600; margin-top: 5px; }
+    .status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+    select { background: var(--panel); border: 1px solid var(--line); color: var(--text);
+             border-radius: 8px; padding: 6px 10px; font-size: 0.82rem; font-family: inherit; }
+{% endblock %}
+{% block content %}
 
-        .notice { background: #101a2b; border: 1px solid #1e3a5f; color: #93c5fd; border-radius: 7px;
-                  padding: 11px 14px; font-size: 0.82rem; line-height: 1.55; margin-bottom: 16px; }
-        .muted-box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-                     padding: 34px 20px; text-align: center; color: var(--muted); font-size: 0.87rem; }
+<div class="crumb"><a href="/cases">Cases</a> &nbsp;/&nbsp; <span class="ref">{{ case.case_ref }}</span></div>
 
-        textarea { width: 100%; min-height: 92px; background: var(--bg); border: 1px solid var(--line);
-                   color: var(--text); border-radius: 6px; padding: 10px 12px; font-size: 0.87rem;
-                   font-family: inherit; resize: vertical; }
-        textarea:focus { outline: none; border-color: var(--accent); }
-
-        .note { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
-                padding: 13px 15px; margin-bottom: 10px; }
-        .note .meta { font-size: 0.72rem; color: var(--dim); margin-bottom: 7px; }
-        .note .body { font-size: 0.87rem; white-space: pre-wrap; line-height: 1.6; }
-
-        .status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-        select { background: var(--bg); border: 1px solid var(--line); color: var(--text);
-                 border-radius: 6px; padding: 6px 10px; font-size: 0.82rem; font-family: inherit; }
-    </style>
-</head>
-<body>
-
-<div class="topbar">
-    <div class="brand"><span class="mark"></span><span class="name">VitalitySync</span></div>
-    <div class="crumb"><a href="/cases">Cases</a> &nbsp;/&nbsp; <span class="ref">{{ case.case_ref }}</span></div>
-    <div class="who"><span>{{ doctor_name }}</span><a href="/logout">Sign out</a></div>
-</div>
-
-<div class="head">
+<div class="cw-head">
     <div>
-        <h1>{{ case.title }}{% if case.is_demo %}<span class="demo-tag">DEMO RECORD</span>{% endif %}</h1>
+        <h1 style="font-size:1.15rem;font-weight:650;margin-bottom:5px;">{{ case.title }}{% if case.is_demo %}<span class="demo-tag">DEMO RECORD</span>{% endif %}</h1>
         <span class="ref">{{ case.case_ref }}</span>
         &nbsp;<span class="pill {{ case.status }}">{{ case.status_label }}</span>
     </div>
@@ -110,7 +67,7 @@
     <button data-pane="notes">Notes</button>
 </div>
 
-<div class="pane on" data-pane="overview">
+<div class="tab-panel pane on" data-pane="overview">
     <div class="grid2">
         <div class="card"><div class="k">Reference</div><div class="v">{{ case.case_ref }}</div></div>
         <div class="card"><div class="k">Status</div><div class="v">{{ case.status_label }}</div></div>
@@ -132,7 +89,7 @@
     </div>
 </div>
 
-<div class="pane" data-pane="imaging">
+<div class="tab-panel pane" data-pane="imaging">
     {% if case.study_id %}
     <div class="notice">The axial, coronal, and sagittal views, windowing presets, and per-voxel Hounsfield readout are provided by the imaging viewer.</div>
     <a class="btn btn-primary" href="/viewer/{{ case.study_id }}">Open 2D Imaging Viewer</a>
@@ -144,7 +101,7 @@
     {% endif %}
 </div>
 
-<div class="pane" data-pane="recon">
+<div class="tab-panel pane" data-pane="recon">
     {% if case.study_id %}
     <div class="notice">
         3D reconstruction runs on this study's own CT voxels using a rule-based (non-AI) segmentation
@@ -157,7 +114,7 @@
     {% endif %}
 </div>
 
-<div class="pane" data-pane="measure">
+<div class="tab-panel pane" data-pane="measure">
     {% if case.study_id %}
     <div class="notice">Distance measurement uses physical patient-space coordinates derived from DICOM voxel spacing — never screen pixels.</div>
     <a class="btn btn-primary" href="/viewer/{{ case.study_id }}">Measure in the 3D Viewer</a>
@@ -170,7 +127,7 @@
     {% endif %}
 </div>
 
-<div class="pane" data-pane="notes">
+<div class="tab-panel pane" data-pane="notes">
     <div style="margin-bottom:16px;">
         <textarea id="noteInput" placeholder="Add a note to this case…" maxlength="8000"></textarea>
         <div style="margin-top:9px; display:flex; align-items:center; gap:10px;">
@@ -181,6 +138,8 @@
     <div id="notesList"></div>
 </div>
 
+{% endblock %}
+{% block extra_scripts %}
 <script>
 (function () {
     const caseRef = {{ case.case_ref | tojson }};
@@ -258,5 +217,4 @@
     loadNotes();
 })();
 </script>
-</body>
-</html>
+{% endblock %}

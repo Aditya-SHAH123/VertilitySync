@@ -1,140 +1,43 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cases — VitalitySync</title>
-    <style>
-        /* CLINICAL DESIGN SYSTEM
-           Dense, fast, minimal motion. Shares brand identity (mark, name,
-           typeface) with the public site but none of its cinematic styling.
-           No marketing media is loaded on any authenticated page. */
-        :root {
-            --bg: #0b0f16; --panel: #131923; --panel2: #171e2a; --line: #1f2836;
-            --text: #e6ebf2; --muted: #8b98ab; --dim: #64728a; --accent: #3b82f6;
-            --ok: #34d399; --warn: #fbbf24; --info: #60a5fa; --off: #64748b;
-        }
-        * { box-sizing: border-box; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px;
-               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        a { color: inherit; text-decoration: none; }
+{% extends "clinical_light_base.html" %}
+{% block title %}Cases — VitalitySync{% endblock %}
+{% block extra_style %}
+    .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .filters button { background: #f2f2f3; color: var(--muted); border: 1px solid var(--line);
+                      border-radius: 100px; padding: 5px 13px; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
+    .filters button:hover { color: var(--text); }
+    .filters button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-                  padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
-        .brand { display: flex; align-items: center; gap: 9px; }
-        .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(140deg, #3b82f6, #1e40af); }
-        .brand .name { font-weight: 650; font-size: 0.9rem; }
-        .search { flex: 1; max-width: 420px; }
-        .search input { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
-                        border-radius: 6px; padding: 7px 11px; font-size: 0.85rem; }
-        .search input:focus { outline: none; border-color: var(--accent); }
-        .who { display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: var(--muted); }
-        .who a { color: var(--muted); }
-        .who a:hover { color: var(--text); }
+    .pill { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
+    .pill.needs_review { background: var(--warn-soft); color: var(--warn); }
+    .pill.processing { background: var(--accent-soft); color: var(--accent); }
+    .pill.ready { background: var(--ok-soft); color: var(--ok); }
+    .pill.archived { background: #f2f2f3; color: var(--muted); }
+    .demo-tag { font-size: 0.66rem; color: var(--dim); border: 1px solid var(--line);
+                border-radius: 4px; padding: 1px 6px; margin-left: 7px; }
+    .ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; color: var(--muted); }
 
-        .shell { display: grid; grid-template-columns: 190px 1fr; min-height: calc(100vh - 45px); }
-        .side { border-right: 1px solid var(--line); padding: 14px 0; background: var(--panel); }
-        .side .grp { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em;
-                     color: var(--dim); padding: 10px 18px 5px; }
-        .side a { display: block; padding: 7px 18px; color: var(--muted); font-size: 0.85rem; }
-        .side a:hover { color: var(--text); background: var(--panel2); }
-        .side a.on { color: var(--text); box-shadow: inset 2px 0 0 var(--accent); background: var(--panel2); }
+    dialog select { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--text);
+                    border-radius: 8px; padding: 9px 11px; font-size: 0.86rem; margin-bottom: 14px; font-family: inherit; }
+{% endblock %}
+{% block content %}
 
-        .main { padding: 20px 22px 60px; }
-        .head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-        h1 { font-size: 1.05rem; margin: 0; font-weight: 650; }
-        .btn { border: none; border-radius: 6px; padding: 7px 14px; font-size: 0.82rem; font-weight: 600;
-               cursor: pointer; font-family: inherit; }
-        .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover { background: #2563eb; }
-        .btn-sub { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
-        .btn-sub:hover { color: var(--text); }
-
-        .filters { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
-        .filters button { background: var(--panel2); color: var(--muted); border: 1px solid var(--line);
-                          border-radius: 100px; padding: 5px 13px; font-size: 0.78rem; cursor: pointer; font-family: inherit; }
-        .filters button:hover { color: var(--text); }
-        .filters button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
-
-        table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line);
-                border-radius: 8px; overflow: hidden; }
-        th { text-align: left; font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.09em;
-             color: var(--dim); font-weight: 600; padding: 9px 14px; border-bottom: 1px solid var(--line); }
-        td { padding: 11px 14px; border-bottom: 1px solid var(--line); font-size: 0.85rem; }
-        tr:last-child td { border-bottom: none; }
-        tbody tr { cursor: pointer; }
-        tbody tr:hover { background: var(--panel2); }
-        .ref { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; color: var(--muted); }
-
-        .pill { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
-        .pill.needs_review { background: #422006; color: var(--warn); }
-        .pill.processing { background: #172554; color: var(--info); }
-        .pill.ready { background: #052e21; color: var(--ok); }
-        .pill.archived { background: #1e293b; color: var(--off); }
-        .demo-tag { font-size: 0.66rem; color: var(--dim); border: 1px solid var(--line);
-                    border-radius: 4px; padding: 1px 6px; margin-left: 7px; }
-
-        .empty { padding: 46px 20px; text-align: center; color: var(--muted); background: var(--panel);
-                 border: 1px solid var(--line); border-radius: 8px; }
-        .empty p { margin: 0 0 14px; font-size: 0.88rem; }
-
-        dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line);
-                 border-radius: 10px; padding: 20px; width: min(420px, 92vw); }
-        dialog::backdrop { background: rgba(0,0,0,0.6); }
-        dialog h2 { margin: 0 0 14px; font-size: 0.95rem; }
-        dialog label { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em;
-                       color: var(--dim); margin-bottom: 5px; }
-        dialog input, dialog select { width: 100%; background: var(--bg); border: 1px solid var(--line);
-                       color: var(--text); border-radius: 6px; padding: 8px 10px; font-size: 0.85rem; margin-bottom: 14px;
-                       font-family: inherit; }
-        .dlg-actions { display: flex; gap: 8px; justify-content: flex-end; }
-
-        @media (max-width: 780px) {
-            .shell { grid-template-columns: 1fr; }
-            .side { display: flex; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--line); padding: 6px; }
-            .side .grp { display: none; }
-            .side a.on { box-shadow: inset 0 -2px 0 var(--accent); }
-            table, thead, tbody, th, td, tr { display: block; }
-            thead { display: none; }
-            td { border-bottom: none; padding: 4px 14px; }
-            tbody tr { border-bottom: 1px solid var(--line); padding: 10px 0; }
-        }
-    </style>
-</head>
-<body>
-
-<div class="topbar">
-    <div class="brand"><span class="mark"></span><span class="name">VitalitySync</span></div>
-    <div class="search"><input type="search" id="searchInput" placeholder="Search cases by title or reference…"></div>
-    <div class="who"><span>{{ doctor_name }}</span><a href="/logout">Sign out</a></div>
+<div class="topline">
+    <h1 style="font-size:1.15rem;font-weight:650;">Cases</h1>
+    <div style="display:flex;gap:8px;align-items:center;">
+        <div class="search-box"><input type="search" id="searchInput" placeholder="Search cases by title or reference…"></div>
+        <button class="btn btn-primary" id="newCaseBtn">New Case</button>
+    </div>
 </div>
 
-<div class="shell">
-    <aside class="side">
-        <div class="grp">Workspace</div>
-        <a class="on" href="/cases">Cases</a>
-        <a href="/dashboard">Imaging Import</a>
-        <div class="grp">Account</div>
-        <a href="/logout">Sign out</a>
-    </aside>
-
-    <main class="main">
-        <div class="head">
-            <h1>Cases</h1>
-            <button class="btn btn-primary" id="newCaseBtn">New Case</button>
-        </div>
-
-        <div class="filters" id="filters">
-            <button data-status="" class="on">All</button>
-            <button data-status="needs_review">Needs Review</button>
-            <button data-status="processing">Processing</button>
-            <button data-status="ready">Ready</button>
-            <button data-status="archived">Archived</button>
-        </div>
-
-        <div id="tableWrap"></div>
-    </main>
+<div class="filters" id="filters">
+    <button data-status="" class="on">All</button>
+    <button data-status="needs_review">Needs Review</button>
+    <button data-status="processing">Processing</button>
+    <button data-status="ready">Ready</button>
+    <button data-status="archived">Archived</button>
 </div>
+
+<div class="panel" id="tableWrap"></div>
 
 <dialog id="newCaseDlg">
     <h2>New Case</h2>
@@ -147,16 +50,18 @@
             <option value="processing">Processing</option>
             <option value="ready">Ready</option>
         </select>
-        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:0.8rem;color:var(--muted);">
+        <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-size:0.8rem;color:var(--muted);margin-top:12px;">
             <input type="checkbox" id="caseDemo" style="width:auto;margin:0;"> Mark as a demonstration record
         </label>
-        <div class="dlg-actions" style="margin-top:14px;">
+        <div class="dlg-actions">
             <button type="button" class="btn btn-sub" id="cancelCase">Cancel</button>
             <button type="button" class="btn btn-primary" id="createCase">Create</button>
         </div>
     </form>
 </dialog>
 
+{% endblock %}
+{% block extra_scripts %}
 <script>
 (function () {
     const tableWrap = document.getElementById('tableWrap');
@@ -254,5 +159,4 @@
     load();
 })();
 </script>
-</body>
-</html>
+{% endblock %}

@@ -1,171 +1,100 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Imaging Import — VitalitySync</title>
-    <style>
-        /* Clinical design system - matches cases.html / case_workspace.html.
-           Dense, fast, minimal motion. No marketing media on this page. */
-        :root {
-            --bg: #0b0f16; --panel: #131923; --panel2: #171e2a; --line: #1f2836;
-            --text: #e6ebf2; --muted: #8b98ab; --dim: #64728a; --accent: #3b82f6;
-            --ok: #34d399; --warn: #fbbf24; --info: #60a5fa; --off: #64748b; --danger: #f87171;
-        }
-        * { box-sizing: border-box; }
-        body { margin: 0; background: var(--bg); color: var(--text); font-size: 14px;
-               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        a { color: inherit; text-decoration: none; }
+{% extends "clinical_light_base.html" %}
+{% set active = "imaging" %}
+{% block title %}Imaging Import — VitalitySync{% endblock %}
+{% block extra_style %}
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px 26px; max-width: 780px; }
+    .card h3 { margin-top: 0; color: var(--text); font-size: 1.05rem; }
+    .card > p.lede { color: var(--muted); margin-top: -4px; margin-bottom: 20px; font-size: 0.87rem; line-height: 1.55; }
 
-        .topbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-                  padding: 10px 18px; border-bottom: 1px solid var(--line); background: var(--panel); }
-        .brand { display: flex; align-items: center; gap: 9px; }
-        .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: linear-gradient(140deg, #3b82f6, #1e40af); }
-        .brand .name { font-weight: 650; font-size: 0.9rem; }
-        .who { display: flex; align-items: center; gap: 12px; font-size: 0.82rem; color: var(--muted); }
-        .who a:hover { color: var(--text); }
+    .dropzone {
+        border: 2px dashed var(--line); border-radius: 10px; padding: 32px 20px; text-align: center;
+        cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; background: var(--bg);
+    }
+    .dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
+    .dropzone p { margin: 0; color: var(--muted); font-size: 0.87rem; }
+    .dropzone .browse { color: var(--accent); font-weight: 600; text-decoration: underline; }
+    #fileInput { display: none; }
 
-        .shell { display: grid; grid-template-columns: 190px 1fr; min-height: calc(100vh - 45px); }
-        .side { border-right: 1px solid var(--line); padding: 14px 0; background: var(--panel); }
-        .side .grp { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em;
-                     color: var(--dim); padding: 10px 18px 5px; }
-        .side a { display: block; padding: 7px 18px; color: var(--muted); font-size: 0.85rem; }
-        .side a:hover { color: var(--text); background: var(--panel2); }
-        .side a.on { color: var(--text); box-shadow: inset 2px 0 0 var(--accent); background: var(--panel2); }
+    .file-summary { margin-top: 14px; font-size: 0.85rem; color: var(--text); display: none; }
+    .file-summary.visible { display: block; }
 
-        .main { padding: 20px 22px 60px; max-width: 780px; }
-        .head { margin-bottom: 16px; }
-        h1 { font-size: 1.05rem; margin: 0; font-weight: 650; }
+    .actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
+    a.btn-viewer { display: none; }
+    a.btn-viewer.visible { display: inline-block; }
+    .btn-viewer .btn { background: var(--ok); color: #fff; }
+    .btn-viewer .btn:hover { background: #147049; }
 
-        .notice { background: #101a2b; border: 1px solid #1e3a5f; color: #93c5fd; border-radius: 7px;
-                  padding: 11px 14px; font-size: 0.82rem; line-height: 1.55; margin-bottom: 16px; }
+    .status-line { margin-top: 18px; font-size: 0.85rem; color: var(--muted); display: none; align-items: center; gap: 10px; }
+    .status-line.visible { display: flex; }
+    .spinner { width: 15px; height: 15px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-        .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 24px 26px; }
-        .card h3 { margin-top: 0; color: var(--text); font-size: 1.05rem; }
-        .card > p.lede { color: var(--muted); margin-top: -4px; margin-bottom: 20px; font-size: 0.87rem; line-height: 1.55; }
+    .error-box { margin-top: 18px; padding: 12px 14px; background: #fdecea; border: 1px solid #f3c2bd;
+                 color: #a02c22; border-radius: 8px; font-size: 0.85rem; display: none; white-space: pre-wrap; }
+    .error-box.visible { display: block; }
 
-        .dropzone {
-            border: 2px dashed var(--line); border-radius: 8px; padding: 32px 20px; text-align: center;
-            cursor: pointer; transition: border-color 0.2s ease, background 0.2s ease; background: var(--bg);
-        }
-        .dropzone.dragover { border-color: var(--accent); background: #101a2b; }
-        .dropzone p { margin: 0; color: var(--muted); font-size: 0.87rem; }
-        .dropzone .browse { color: var(--accent); font-weight: 600; text-decoration: underline; }
-        #fileInput { display: none; }
+    .results { margin-top: 24px; display: none; }
+    .results.visible { display: block; }
+    .results h4 { margin-bottom: 8px; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
 
-        .file-summary { margin-top: 14px; font-size: 0.85rem; color: var(--text); display: none; }
-        .file-summary.visible { display: block; }
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
+    .badge-PASS { background: var(--ok-soft); color: var(--ok); }
+    .badge-WARNING { background: var(--warn-soft); color: var(--warn); }
+    .badge-FAIL { background: #fdecea; color: #a02c22; }
 
-        .actions { margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap; }
-        .btn { border: none; border-radius: 6px; padding: 8px 16px; font-weight: 600; font-size: 0.85rem;
-               cursor: pointer; font-family: inherit; transition: background 0.2s ease; }
-        .btn-primary { background: var(--accent); color: #fff; }
-        .btn-primary:hover:not(:disabled) { background: #2563eb; }
-        .btn-primary:disabled { background: #1e3a5f; color: var(--dim); cursor: not-allowed; }
-        .btn-sub { background: var(--panel2); color: var(--muted); border: 1px solid var(--line); }
-        .btn-sub:hover:not(:disabled) { color: var(--text); }
-        .btn-sub:disabled { opacity: 0.5; cursor: not-allowed; }
-        a.btn-viewer { display: none; }
-        a.btn-viewer.visible { display: inline-block; }
-        .btn-viewer .btn { background: var(--ok); color: #052e21; }
-        .btn-viewer .btn:hover { background: #2fbf8f; }
+    .file-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; background: var(--bg); }
+    .file-row { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 0.83rem; }
+    .file-row:last-child { border-bottom: none; }
+    .file-row .fname { font-weight: 600; color: var(--text); margin-right: 8px; }
+    .file-row ul { margin: 6px 0 0 0; padding-left: 18px; color: var(--muted); }
 
-        .status-line { margin-top: 18px; font-size: 0.85rem; color: var(--muted); display: none; align-items: center; gap: 10px; }
-        .status-line.visible { display: flex; }
-        .spinner { width: 15px; height: 15px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
+    .summary-item { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+    .summary-item .label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 4px; }
+    .summary-item .value { font-size: 0.9rem; color: var(--text); font-weight: 600; }
 
-        .error-box { margin-top: 18px; padding: 12px 14px; background: #450a0a; border: 1px solid #7f1d1d;
-                     color: var(--danger); border-radius: 7px; font-size: 0.85rem; display: none; white-space: pre-wrap; }
-        .error-box.visible { display: block; }
+    .warnings-list { font-size: 0.83rem; color: var(--warn); background: var(--warn-soft); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 4px; }
+    .warnings-list li { margin-bottom: 4px; }
+    .warnings-list li:last-child { margin-bottom: 0; }
+{% endblock %}
+{% block content %}
 
-        .results { margin-top: 24px; display: none; }
-        .results.visible { display: block; }
-        .results h4 { margin-bottom: 8px; color: var(--text); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
+<h1 style="font-size:1.15rem;font-weight:650;margin-bottom:16px;">Imaging Import</h1>
 
-        .badge { display: inline-block; padding: 2px 9px; border-radius: 100px; font-size: 0.7rem; font-weight: 600; }
-        .badge-PASS { background: #052e21; color: var(--ok); }
-        .badge-WARNING { background: #422006; color: var(--warn); }
-        .badge-FAIL { background: #450a0a; color: var(--danger); }
+<div class="card">
+    <h3>🫁 Chest CT Import</h3>
+    <p class="lede">Select a complete DICOM CT series to validate it, reconstruct a 3D volume, and open it in the multi-planar viewer. This is an imaging and research-education tool only — it does not diagnose disease, and no patient-identifying data ever leaves this browser.</p>
 
-        .file-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px; background: var(--bg); }
-        .file-row { padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 0.83rem; }
-        .file-row:last-child { border-bottom: none; }
-        .file-row .fname { font-weight: 600; color: var(--text); margin-right: 8px; }
-        .file-row ul { margin: 6px 0 0 0; padding-left: 18px; color: var(--muted); }
+    <div class="dropzone" id="dropzone">
+        <p>Drag and drop a DICOM series or a <strong>.zip archive</strong> here, or <span class="browse">browse files</span></p>
+        <p style="margin-top:8px;font-size:0.78rem;color:var(--dim);">Public research collections (for example TCIA) download as a single .zip &mdash; you can import it directly. <a href="#" id="pickFolder" style="color:var(--accent);">Select a folder instead</a>.</p>
+        <input type="file" id="fileInput" multiple accept=".dcm,.dicom,.zip,application/zip,application/dicom">
+        <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none;">
+    </div>
+    <div class="file-summary" id="fileSummary"></div>
 
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 18px; }
-        .summary-item { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
-        .summary-item .label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 4px; }
-        .summary-item .value { font-size: 0.9rem; color: var(--text); font-weight: 600; }
+    <div class="actions">
+        <button class="btn btn-primary" id="processBtn" disabled>Process Series</button>
+        <button class="btn btn-sub" id="clearBtn" disabled>Clear</button>
+        <a class="btn-viewer" id="viewerLink" href="#"><button class="btn" type="button">Open in Viewer &rarr;</button></a>
+    </div>
 
-        .warnings-list { font-size: 0.83rem; color: var(--warn); background: #201a06; border: 1px solid #422006; border-radius: 8px; padding: 12px 14px; margin-bottom: 4px; }
-        .warnings-list li { margin-bottom: 4px; }
-        .warnings-list li:last-child { margin-bottom: 0; }
+    <div class="status-line" id="statusLine"><div class="spinner"></div><span id="statusText">Processing…</span></div>
+    <div class="error-box" id="errorBox"></div>
 
-        @media (max-width: 780px) {
-            .shell { grid-template-columns: 1fr; }
-            .side { display: flex; overflow-x: auto; border-right: none; border-bottom: 1px solid var(--line); padding: 6px; }
-            .side .grp { display: none; }
-            .side a.on { box-shadow: inset 0 -2px 0 var(--accent); }
-        }
-    </style>
-</head>
-<body>
+    <div class="results" id="results">
+        <h4>Study Summary</h4>
+        <div class="summary-grid" id="summaryGrid"></div>
 
-<div class="topbar">
-    <div class="brand"><span class="mark"></span><span class="name">VitalitySync</span></div>
-    <div class="who"><span>{{ doctor_name }}</span><a href="/logout">Sign out</a></div>
+        <div id="warningsWrap"></div>
+
+        <h4>Per-File Validation</h4>
+        <div class="file-list" id="fileList"></div>
+    </div>
 </div>
 
-<div class="shell">
-    <aside class="side">
-        <div class="grp">Workspace</div>
-        <a href="/cases">Cases</a>
-        <a class="on" href="/dashboard">Imaging Import</a>
-        <div class="grp">Account</div>
-        <a href="/logout">Sign out</a>
-    </aside>
-
-    <main class="main">
-        <div class="head">
-            <h1>Imaging Import</h1>
-        </div>
-
-        <div class="card">
-            <h3>🫁 Chest CT Import</h3>
-            <p class="lede">Select a complete DICOM CT series to validate it, reconstruct a 3D volume, and open it in the multi-planar viewer. This is an imaging and research-education tool only — it does not diagnose disease, and no patient-identifying data ever leaves this browser.</p>
-
-            <div class="dropzone" id="dropzone">
-                <p>Drag and drop a DICOM series or a <strong>.zip archive</strong> here, or <span class="browse">browse files</span></p>
-                <p style="margin-top:8px;font-size:0.78rem;color:var(--dim);">Public research collections (for example TCIA) download as a single .zip &mdash; you can import it directly. <a href="#" id="pickFolder" style="color:var(--accent);">Select a folder instead</a>.</p>
-                <input type="file" id="fileInput" multiple accept=".dcm,.dicom,.zip,application/zip,application/dicom">
-                <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none;">
-            </div>
-            <div class="file-summary" id="fileSummary"></div>
-
-            <div class="actions">
-                <button class="btn btn-primary" id="processBtn" disabled>Process Series</button>
-                <button class="btn btn-sub" id="clearBtn" disabled>Clear</button>
-                <a class="btn-viewer" id="viewerLink" href="#"><button class="btn" type="button">Open in Viewer &rarr;</button></a>
-            </div>
-
-            <div class="status-line" id="statusLine"><div class="spinner"></div><span id="statusText">Processing…</span></div>
-            <div class="error-box" id="errorBox"></div>
-
-            <div class="results" id="results">
-                <h4>Study Summary</h4>
-                <div class="summary-grid" id="summaryGrid"></div>
-
-                <div id="warningsWrap"></div>
-
-                <h4>Per-File Validation</h4>
-                <div class="file-list" id="fileList"></div>
-            </div>
-        </div>
-    </main>
-</div>
-
+{% endblock %}
+{% block extra_scripts %}
 <script>
 (function () {
     const dropzone = document.getElementById('dropzone');
@@ -349,5 +278,4 @@
     });
 })();
 </script>
-</body>
-</html>
+{% endblock %}
