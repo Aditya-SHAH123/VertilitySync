@@ -40,7 +40,9 @@
       "media_type": "image",
       "aspect_ratio": "16:9",
       "review_status": "approved",
-      "prompt": "Restrained scientific diagram-style visualization of a three-dimensional lung reconstruction spatially aligned above three grayscale orthogonal cross-sectional planes, conveying precise physical coordinate correspondence, deep graphite background, controlled lighting, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information."
+      "revision_note": "Original prompt below produced an unusable result when actually generated (surreal organic bubble patterns with bead-like artifacts, not the intended clean diagram) - revised to a more literal, geometric description and re-approved after reviewing the new output. Kept for the record, not used for generation.",
+      "superseded_prompt": "Restrained scientific diagram-style visualization of a three-dimensional lung reconstruction spatially aligned above three grayscale orthogonal cross-sectional planes, conveying precise physical coordinate correspondence, deep graphite background, controlled lighting, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information.",
+      "prompt": "Minimalist technical diagram on a dark graphite background: a smooth three-dimensional gray lung shape floating above three flat rectangular panels arranged in a row, each panel a simple grayscale cross-sectional slice image, thin connecting guide lines from the 3D shape down to each panel, clean geometric layout, engineering blueprint style, no anatomy detail inside the panels, no organic texture, no text, no patient identifiers, no labels, no annotations, no diagnostic information."
     },
     {
       "id": "section_background_texture",

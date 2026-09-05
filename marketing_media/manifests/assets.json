@@ -6,5 +6,26 @@
     "Every entry is public marketing media and is never derived from patient data."
   ],
   "version": "1.0.0",
-  "assets": []
+  "assets": [
+    {
+      "prompt_id": "section_background_texture",
+      "asset_path": "marketing_media/assets/section_background_texture.webp",
+      "media_type": "image",
+      "poster": null,
+      "reviewed_by": "assistant-session-2026-09-04",
+      "notes": "Generated via Higgsfield z_image, reviewed visually, matches the approved prompt as-is. Embedded as an inline base64 data URI in templates/index.html (High-fidelity imaging section background), not served as a separate static file.",
+      "classification": "public-marketing-media",
+      "derived_from_patient_data": false
+    },
+    {
+      "prompt_id": "coordinate_link_visual",
+      "asset_path": "marketing_media/assets/coordinate_link_visual.webp",
+      "media_type": "image",
+      "poster": null,
+      "reviewed_by": "assistant-session-2026-09-04",
+      "notes": "First generation attempt (original approved prompt) produced an unusable surreal result and was discarded, not saved. This asset is from the REVISED prompt (see approved_prompts.json revision_note/superseded_prompt for coordinate_link_visual), reviewed visually before use. Embedded as an inline base64 data URI in templates/index.html (Coordinate mapping section).",
+      "classification": "public-marketing-media",
+      "derived_from_patient_data": false
+    }
+  ]
 }
