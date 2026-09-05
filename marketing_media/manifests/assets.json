@@ -36,6 +36,26 @@
       "notes": "Generated via Higgsfield z_image, reviewed visually. Used ONLY in the safety.html FAQ answer about future plans, explicitly captioned on-page as a concept illustration - none of what it depicts (airway/vessel layers) is an implemented feature. Embedded as an inline base64 data URI, not a separate static file.",
       "classification": "public-marketing-media",
       "derived_from_patient_data": false
+    },
+    {
+      "prompt_id": "problem_statement_visual",
+      "asset_path": "marketing_media/assets/problem_statement_visual.webp",
+      "media_type": "image",
+      "poster": null,
+      "reviewed_by": "assistant-session-2026-09-05",
+      "notes": "First generation attempt (original approved prompt) produced realistic film-style panels with garbled pseudo-text artifacts in the corners - discarded, not shipped, prompt revised. This asset is from the revised, plain-blank-panel prompt, reviewed visually before use. Served as a same-origin static file (api/static/marketing/), same reasoning as roadmap_layers_concept - safety.html has a test asserting no data:image/webp payload is embedded there.",
+      "classification": "public-marketing-media",
+      "derived_from_patient_data": false
+    },
+    {
+      "prompt_id": "real_world_insight_visual",
+      "asset_path": "marketing_media/assets/real_world_insight_visual.webp",
+      "media_type": "image",
+      "poster": null,
+      "reviewed_by": "assistant-session-2026-09-05",
+      "notes": "Generated via Higgsfield z_image, reviewed visually, matches the approved prompt as-is. Served as a same-origin static file for the same reason as the other safety.html FAQ images.",
+      "classification": "public-marketing-media",
+      "derived_from_patient_data": false
     }
   ]
 }

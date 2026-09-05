@@ -60,6 +60,26 @@
       "review_status": "approved",
       "usage_note": "For the safety.html FAQ answer on future plans ONLY. Must be captioned on-page as a concept illustration, not a screenshot of a working feature - none of what it depicts (airway/vessel layers) is implemented. See NOT YET IMPLEMENTED framing already used elsewhere on this page.",
       "prompt": "Restrained scientific concept sketch on a dark graphite background: a smooth solid three-dimensional lung surface model with faint translucent wireframe-style overlays suggesting additional anatomical layers - a subtle branching airway-like structure and a subtle branching vessel-like structure sketched as thin outlined hints rather than solid detail, conveying an early concept for a future capability rather than a finished result, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information."
+    },
+    {
+      "id": "problem_statement_visual",
+      "section": "faq_problem",
+      "media_type": "image",
+      "aspect_ratio": "4:3",
+      "review_status": "approved",
+      "usage_note": "For the safety.html FAQ answer on the problem this application addresses. Depicts disorganized/unordered blank panels as an abstract conceptual illustration of raw, unreconstructed imaging data - not a real study, not a real scan printout.",
+      "revision_note": "Original prompt below produced panels with realistic radiology-film styling that included garbled pseudo-text artifacts in the corners (a known AI text-rendering failure) - unacceptable given the 'no text' requirement. Revised to plain, flat, textureless panels to avoid the model reaching for realistic film-label styling.",
+      "superseded_prompt": "Restrained scientific concept visualization on a dark graphite background: a loose scattered stack of grayscale rectangular CT-slice-like planes, floating at random angles and misaligned positions, disconnected from one another, conveying disorganized raw imaging data before spatial reconstruction, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information.",
+      "prompt": "Restrained minimalist 3D concept render on a dark graphite background: a loose scattered stack of plain flat blank rectangular panels in solid light gray, floating at random angles and misaligned positions, disconnected from one another, completely blank and featureless surfaces, conveying disorganized raw data before spatial reconstruction, clean geometric abstraction, premium technology presentation, no text, no patient identifiers, no labels, no annotations, no diagnostic information, no imagery or texture on the panel surfaces."
+    },
+    {
+      "id": "real_world_insight_visual",
+      "section": "faq_insight",
+      "media_type": "image",
+      "aspect_ratio": "4:3",
+      "review_status": "approved",
+      "usage_note": "For the safety.html FAQ answer on the real-world engineering insight from this project (synthetic phantoms did not catch a real segmentation bug that only appeared on real data). Depicts a side-by-side conceptual contrast, not a real bug screenshot.",
+      "prompt": "Restrained scientific comparison visualization on a dark graphite background: two lung silhouettes shown side by side, the left one perfectly smooth and idealized, the right one textured with subtle realistic surface irregularity and asymmetry, conveying the difference between simplified synthetic test data and messier real-world data, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information."
     }
   ]
 }

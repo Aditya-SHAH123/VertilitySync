@@ -93,6 +93,15 @@
         </div>
         <div class="faq reveal d1">
             <details>
+                <summary>What problem does this actually solve?</summary>
+                <div class="ans">
+                    <p>A DICOM CT series is a folder of hundreds of individual slice files, each carrying its own position and orientation in physical space. Reconstructing that into something a person can actually look at — a coherent volume, an accurate 3D surface, a measurement in real millimetres — requires putting every one of those slices back in its correct physical place first. Get that step wrong, or skip it by approximating, and everything built on top of it is quietly wrong too: a mesh with the right shape but the wrong size, a measurement that looks precise but isn't traceable to anything real.</p>
+                    <img src="/static/marketing/problem_statement_visual.webp" alt="Concept illustration: a loose, disorganized scatter of blank rectangular panels, representing unordered raw slice data before spatial reconstruction" style="width:100%;max-width:420px;border-radius:10px;margin:14px 0 6px;border:1px solid var(--line);display:block;" loading="lazy">
+                    <p style="font-size:0.8rem;color:var(--muted);">Concept illustration only — abstract, not a real study or a real scan printout.</p>
+                    <p>This application exists to do that reconstruction honestly: real physical geometry carried through from the source DICOM tags, never approximated, with every displayed number traceable back to the voxels it came from — see the next few questions for exactly how.</p>
+                </div>
+            </details>
+            <details>
                 <summary>What exactly do I need to upload?</summary>
                 <div class="ans">
                     <p>The original DICOM series — the folder of <code>.dcm</code> files a scanner produces, typically hundreds of them for a chest CT.</p>
@@ -138,6 +147,15 @@
                 <summary>Can I use this clinically?</summary>
                 <div class="ans">
                     <p>No. This is a visualization and research tool. It is not a certified medical device, it has no regulatory clearance, and it makes no claim of clinical validation. Nothing it displays is a diagnosis.</p>
+                </div>
+            </details>
+            <details>
+                <summary>What real-world insight came out of building this?</summary>
+                <div class="ans">
+                    <p>That synthetic test data, no matter how carefully constructed, does not exercise everything real data does. During development, a segmentation bug went undetected through an extensive synthetic test suite: the enclosed air gap between a patient's back and the scanner table was being counted as lung tissue, because none of the synthetic phantoms modelled a scanner table in the first place. It only surfaced by rendering an actual public research CT and looking at the result.</p>
+                    <img src="/static/marketing/real_world_insight_visual.webp" alt="Concept illustration: two lung silhouettes side by side, one smooth and idealized, the other textured and irregular, representing the difference between synthetic test data and real data" style="width:100%;max-width:420px;border-radius:10px;margin:14px 0 6px;border:1px solid var(--line);display:block;" loading="lazy">
+                    <p style="font-size:0.8rem;color:var(--muted);">Concept illustration only — abstract, not the actual comparison images from that investigation.</p>
+                    <p>The fix — deriving the body outline from the largest connected soft-tissue region instead of inverting external air — is now covered by a regression test built specifically around that failure mode. The broader lesson stuck: real data gets checked before a result is trusted, synthetic phantoms alone are not sufficient validation for a medical imaging pipeline.</p>
                 </div>
             </details>
             <details>
