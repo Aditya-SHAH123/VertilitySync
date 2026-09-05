@@ -156,25 +156,68 @@ def main():
     check('deleting unknown measurement -> 404', r.status_code == 404, r.status_code)
 
     # ---------------- annotations ----------------
+    # 2D slice pin: server derives mm from a client voxel index.
     r = client.post(f'/api/dicom/study/{study_id}/annotations',
                      json={'text': 'Watch this area at the next visit.', 'voxel': [cx, cy, cz]})
-    check('annotation with position created -> 201', r.status_code == 201, (r.status_code, r.get_json()))
+    check('annotation with voxel-derived pin created -> 201', r.status_code == 201, (r.status_code, r.get_json()))
     annotation_id = r.get_json()['annotation_id']
 
-    r = client.post(f'/api/dicom/study/{study_id}/annotations', json={'text': '   '})
+    # 3D mesh pin: client sends an already-real mm point from a raycast hit.
+    r = client.post(f'/api/dicom/study/{study_id}/annotations',
+                     json={'text': 'Nodule looks stable here.', 'points_mm': [12.5, -30.0, 44.0],
+                           'color': '#3d7be8'})
+    check('annotation with 3D mesh pin created -> 201', r.status_code == 201, (r.status_code, r.get_json()))
+    mesh_pin_id = r.get_json()['annotation_id']
+
+    # 3D mesh stroke: multiple mm points, a freehand highlight.
+    r = client.post(f'/api/dicom/study/{study_id}/annotations',
+                     json={'text': 'Suspicious ridge along this line.',
+                           'stroke_points_mm': [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]})
+    check('annotation with 3D mesh stroke created -> 201', r.status_code == 201, (r.status_code, r.get_json()))
+    stroke_id = r.get_json()['annotation_id']
+
+    r = client.post(f'/api/dicom/study/{study_id}/annotations',
+                     json={'text': '   ', 'voxel': [cx, cy, cz]})
     check('empty annotation text -> 400', r.status_code == 400, r.status_code)
 
+    r = client.post(f'/api/dicom/study/{study_id}/annotations', json={'text': 'no location'})
+    check('annotation with no location supplied -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post(f'/api/dicom/study/{study_id}/annotations',
+                     json={'text': 'both', 'voxel': [cx, cy, cz], 'points_mm': [0, 0, 0]})
+    check('annotation with two location fields -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post(f'/api/dicom/study/{study_id}/annotations',
+                     json={'text': 'bad color', 'points_mm': [0, 0, 0], 'color': 'red'})
+    check('annotation with invalid color -> 400', r.status_code == 400, r.status_code)
+
+    r = client.post(f'/api/dicom/study/{study_id}/annotations',
+                     json={'text': 'too far', 'points_mm': [999999, 0, 0]})
+    check('annotation with out-of-range coordinate -> 400', r.status_code == 400, r.status_code)
+
     r = client.get(f'/api/dicom/study/{study_id}/annotations')
-    check('list annotations -> 200 with one row', r.status_code == 200 and
-          len(r.get_json()['annotations']) == 1, r.get_json())
-    check('annotation position round-trips as patient-space mm',
-          r.get_json()['annotations'][0]['position_mm'] is not None)
+    check('list annotations -> 200 with three rows', r.status_code == 200 and
+          len(r.get_json()['annotations']) == 3, r.get_json())
+    by_id = {a['id']: a for a in r.get_json()['annotations']}
+    check('voxel-derived annotation is a pin with default color',
+          by_id[annotation_id]['kind'] == 'pin' and by_id[annotation_id]['color'] == '#e8a33d',
+          by_id[annotation_id])
+    check('mesh pin annotation carries its custom color',
+          by_id[mesh_pin_id]['kind'] == 'pin' and by_id[mesh_pin_id]['color'] == '#3d7be8',
+          by_id[mesh_pin_id])
+    check('mesh stroke annotation has 3 points and kind stroke',
+          by_id[stroke_id]['kind'] == 'stroke' and len(by_id[stroke_id]['points_mm']) == 3,
+          by_id[stroke_id])
 
     r = other_client.delete(f'/api/dicom/study/{study_id}/annotations/{annotation_id}')
     check("another doctor's study lookup fails before ownership of the annotation is even checked -> 404",
           r.status_code == 404, r.status_code)
     r = client.delete(f'/api/dicom/study/{study_id}/annotations/{annotation_id}')
     check('creating doctor can delete their annotation -> 200', r.status_code == 200, r.status_code)
+    r = client.delete(f'/api/dicom/study/{study_id}/annotations/{mesh_pin_id}')
+    check('creating doctor can delete the mesh pin annotation -> 200', r.status_code == 200, r.status_code)
+    r = client.delete(f'/api/dicom/study/{study_id}/annotations/{stroke_id}')
+    check('creating doctor can delete the stroke annotation -> 200', r.status_code == 200, r.status_code)
 
     # ---------------- deterministic regions: sync from a real analysis ----------------
     r = client.post(f'/api/dicom/study/{study_id}/segment-lungs')

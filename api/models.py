@@ -260,13 +260,32 @@ class Measurement(Base):
 
 
 class Annotation(Base):
-    """A clinician's free-text note, optionally anchored to a point."""
+    """A clinician's free-text note anchored to one or more patient-space
+    points on the 3D model or a 2D slice - a single point is a "pin"; more
+    than one is a freehand highlight stroke drawn across the mesh surface.
+
+    COORDINATE TRUST: for a 2D-slice pin, the server derives points_json
+    from a client-sent VOXEL INDEX via VolumeGeometry.to_world (see
+    index.py's _voxel_to_world_and_hu) - the client never sends millimetre
+    coordinates directly for that path. For a 3D-mesh pin or stroke, the
+    client sends the millimetre point(s) directly, and this is intentional
+    rather than a relaxation of that rule: the mesh vertices the browser
+    raycasts against were themselves computed server-side with the true
+    physical affine (mesh_reconstruction.build_lung_mesh), so any point on
+    that surface - including a raycast hit interpolated between vertices -
+    is already real patient-space geometry, not a screen-pixel guess. The
+    same trust boundary already applies to the viewer's existing (session-
+    only, unsaved) 3D distance-measurement tool. Server-side validation
+    still bounds every coordinate to a plausible physical range (see
+    index.py's _validate_points_mm) to catch a malformed/corrupted request.
+    """
     __tablename__ = "annotations"
 
     id = Column(String(36), primary_key=True, default=_uuid)
     study_id = Column(String(36), ForeignKey("imaging_studies.id"), nullable=False, index=True)
 
-    position_json = Column(Text, nullable=True)  # [x_mm, y_mm, z_mm] or null
+    points_json = Column(Text, nullable=False)  # JSON list of >=1 [x_mm, y_mm, z_mm]
+    color = Column(String(7), nullable=False, default="#e8a33d")  # #RRGGBB
     text = Column(Text, nullable=False)
 
     created_by_doctor_id = Column(Integer, nullable=False, index=True)

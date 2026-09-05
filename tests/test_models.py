@@ -252,24 +252,34 @@ class TestAnnotations(ModelsTestCase):
         self.sid = "study-annot-1"
         m.upsert_imaging_study(self.sid, owner_doctor_id=1)
 
-    def test_note_without_position(self):
-        aid = m.create_annotation(self.sid, "Follow up in 6 months.", created_by_doctor_id=2)
+    def test_note_with_single_point_is_a_pin(self):
+        aid = m.create_annotation(self.sid, "Dense region here", created_by_doctor_id=2,
+                                   points_mm=[[5.0, 5.0, 5.0]])
         rows = m.list_annotations(self.sid)
         self.assertEqual(rows[0]["id"], aid)
-        self.assertIsNone(rows[0]["position_mm"])
+        self.assertEqual(rows[0]["points_mm"], [[5.0, 5.0, 5.0]])
+        self.assertEqual(rows[0]["kind"], "pin")
+        self.assertEqual(rows[0]["color"], "#e8a33d")
 
-    def test_note_with_position(self):
-        m.create_annotation(self.sid, "Dense region here", created_by_doctor_id=2,
-                             position_mm=[5.0, 5.0, 5.0])
+    def test_note_with_multiple_points_is_a_stroke(self):
+        pts = [[0.0, 0.0, 0.0], [1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+        m.create_annotation(self.sid, "Suspicious ridge", created_by_doctor_id=2,
+                             points_mm=pts, color="#3d7be8")
         rows = m.list_annotations(self.sid)
-        self.assertEqual(rows[0]["position_mm"], [5.0, 5.0, 5.0])
+        self.assertEqual(rows[0]["points_mm"], pts)
+        self.assertEqual(rows[0]["kind"], "stroke")
+        self.assertEqual(rows[0]["color"], "#3d7be8")
 
     def test_empty_text_rejected(self):
         with self.assertRaises(ValueError):
-            m.create_annotation(self.sid, "   ", created_by_doctor_id=1)
+            m.create_annotation(self.sid, "   ", created_by_doctor_id=1, points_mm=[[0, 0, 0]])
+
+    def test_no_points_rejected(self):
+        with self.assertRaises(ValueError):
+            m.create_annotation(self.sid, "note", created_by_doctor_id=1, points_mm=[])
 
     def test_delete_requires_matching_creator(self):
-        aid = m.create_annotation(self.sid, "note", created_by_doctor_id=1)
+        aid = m.create_annotation(self.sid, "note", created_by_doctor_id=1, points_mm=[[0, 0, 0]])
         with self.assertRaises(PermissionError):
             m.delete_annotation(aid, created_by_doctor_id=2)
         m.delete_annotation(aid, created_by_doctor_id=1)
@@ -285,7 +295,7 @@ class TestCascadeDelete(ModelsTestCase):
         m.create_region(sid, source="deterministic_segmentation")
         m.create_measurement(sid, "point_hu", geometry_mm=[[0, 0, 0]],
                               value=-800.0, units="HU", created_by_doctor_id=1)
-        m.create_annotation(sid, "note", created_by_doctor_id=1)
+        m.create_annotation(sid, "note", created_by_doctor_id=1, points_mm=[[0, 0, 0]])
 
         with db_engine.get_session() as s:
             from models import ImagingStudy

@@ -254,6 +254,12 @@
                         <button class="small-btn" id="clearMeasureBtn">Clear Measurement</button>
                         <button class="small-btn" id="screenshot3dBtn">Screenshot</button>
                     </div>
+                    <div class="control-group">
+                        <button class="small-btn" id="annotateBtn">Highlight / Draw</button>
+                        <span class="lbl">Color</span>
+                        <input type="color" id="annotateColor" value="#e8a33d" style="width:36px;height:26px;padding:0;border:1px solid #2a3446;border-radius:5px;background:none;cursor:pointer;">
+                        <button class="small-btn" id="clearAnnotateDraftBtn">Cancel Draft</button>
+                    </div>
                 </div>
 
                 <div class="controls-bar" id="clipControls" style="display:none;">
@@ -295,6 +301,21 @@
                 <div class="info-bar" id="selectedPositionPanel" style="display:none;"></div>
                 <div class="info-bar" id="measureBar" style="display:none;">
                     <div class="info-item"><div class="label">Measurement</div><div class="value" id="measureReadout">Click "Measure", then two points on the model.</div></div>
+                </div>
+
+                <div class="notes-panel" id="annotationPanel" style="display:none;">
+                    <h3>3D Annotations
+                        <span style="font-weight:400;font-size:0.78rem;color:#94a3b8;" id="annotateStatus">Click "Highlight / Draw", then click for a pin or click-and-drag to paint a highlight stroke.</span>
+                    </h3>
+                    <div id="annotationCompose" style="display:none;margin-top:6px;">
+                        <textarea id="annotationText" placeholder="What did you notice here?"></textarea>
+                        <div id="annotationError" style="color:#f87171;font-size:0.78rem;margin-bottom:8px;"></div>
+                        <div class="row-actions">
+                            <button class="small-btn" id="annotationCancelBtn">Discard</button>
+                            <button class="small-btn active" id="annotationSaveBtn">Save Annotation</button>
+                        </div>
+                    </div>
+                    <div id="annotationList" style="font-size:0.82rem;color:#94a3b8;margin-top:8px;">No annotations saved yet.</div>
                 </div>
             </div>
         </div>
@@ -1245,6 +1266,8 @@ const state = {
         sagittal: { enabled: false, value: 1.0, axis: 0, sign: -1 },
     },
     measure: { active: false, points: [] },
+    annotate: { active: false, color: '#e8a33d', dragging: false, draftPoints: [] },
+    annotations: [],
     volumeTexture: null,
     volumeMesh: null,
     volumeWL: -600, volumeWW: 1500,
@@ -1268,6 +1291,12 @@ const reconInfoBar = document.getElementById('reconInfoBar');
 const selectedPositionPanel = document.getElementById('selectedPositionPanel');
 const measureBar = document.getElementById('measureBar');
 const measureReadout = document.getElementById('measureReadout');
+const annotationPanel = document.getElementById('annotationPanel');
+const annotateStatus = document.getElementById('annotateStatus');
+const annotationCompose = document.getElementById('annotationCompose');
+const annotationText = document.getElementById('annotationText');
+const annotationError = document.getElementById('annotationError');
+const annotationList = document.getElementById('annotationList');
 const partLeftBtn = document.getElementById('partLeftBtn');
 const partRightBtn = document.getElementById('partRightBtn');
 
@@ -1358,6 +1387,8 @@ let renderer, scene, camera, controls;
 let currentMeshes = [];
 let markerMesh = null;
 let measureGroup = new THREE.Group();
+let annotationGroup = new THREE.Group();      // saved annotations (persisted)
+let annotationDraftGroup = new THREE.Group(); // in-progress, unsaved stroke/pin preview
 // min/max must exist from the start: activeClipPlanes() indexes them, and a
 // clip toggle could otherwise be read before computeSceneBounds() first runs.
 let sceneBounds = { center: [0, 0, 0], radius: 100, min: [-100, -100, -100], max: [100, 100, 100] };
@@ -1381,6 +1412,8 @@ function initScene() {
     scene.add(fill);
 
     scene.add(measureGroup);
+    scene.add(annotationGroup);
+    scene.add(annotationDraftGroup);
 
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -1391,11 +1424,26 @@ function initScene() {
     window.addEventListener('resize', onResize);
 
     let pointerDown = null;
-    renderer.domElement.addEventListener('pointerdown', (e) => { pointerDown = [e.clientX, e.clientY]; });
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+        pointerDown = [e.clientX, e.clientY];
+        if (state.annotate.active && annotationCompose.style.display === 'none') {
+            beginAnnotationDraft(e.clientX, e.clientY);
+        }
+    });
+    renderer.domElement.addEventListener('pointermove', (e) => {
+        if (!pointerDown) return;
+        if (state.annotate.active && annotationCompose.style.display === 'none') {
+            extendAnnotationDraft(e.clientX, e.clientY);
+        }
+    });
     renderer.domElement.addEventListener('pointerup', (e) => {
         if (!pointerDown) return;
         const dx = e.clientX - pointerDown[0], dy = e.clientY - pointerDown[1];
         pointerDown = null;
+        if (state.annotate.active) {
+            if (annotationCompose.style.display === 'none') finishAnnotationDraft();
+            return;
+        }
         if (Math.hypot(dx, dy) > 4) return;
         handleClick(e);
     });
@@ -1835,6 +1883,218 @@ function handleClick(e) {
 }
 
 // ---------------------------------------------------------------------------
+// 3D annotations - highlight/draw on the mesh and save to the database.
+//
+// COORDINATE TRUST: every point here comes from raycasting the mouse against
+// currentMeshes, i.e. the segmented lung surface that mesh_reconstruction.py
+// built server-side from the study's real physical affine. A raycast hit is
+// therefore already a genuine patient-space millimetre point (interpolated
+// between real mesh vertices), not a screen-pixel guess - the same trust
+// boundary the existing Measure tool already relies on. See models.py's
+// Annotation docstring and index.py's _validate_points_mm for the
+// server-side half of this reasoning; the server still bounds every
+// coordinate to a plausible physical range in case of a corrupted request.
+// ---------------------------------------------------------------------------
+function colorToInt(hex) { return parseInt((hex || '#e8a33d').replace('#', ''), 16); }
+function clearGroupChildren(group) {
+    while (group.children.length) {
+        const c = group.children.pop();
+        c.geometry.dispose();
+        c.material.dispose();
+    }
+}
+
+function raycastAnnotationPoint(clientX, clientY) {
+    if (!currentMeshes.length) return null;
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouseNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(mouseNdc, camera);
+    const hits = raycaster.intersectObjects(currentMeshes, false);
+    if (!hits.length) return null;
+    const point = hits[0].point;
+    return { patient: threeToPatient([point.x, point.y, point.z]), three: point.clone() };
+}
+
+function addAnnotationMarker(group, point, color, opacity) {
+    const geo = new THREE.SphereGeometry(Math.max(sceneBounds.radius * 0.017, 1.1), 12, 12);
+    const mat = new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: opacity < 1, opacity });
+    const m = new THREE.Mesh(geo, mat);
+    m.position.copy(point);
+    m.renderOrder = 997;
+    group.add(m);
+}
+function addAnnotationLine(group, points3, color, opacity) {
+    const geo = new THREE.BufferGeometry().setFromPoints(points3);
+    const mat = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: opacity < 1, opacity });
+    const line = new THREE.Line(geo, mat);
+    line.renderOrder = 997;
+    group.add(line);
+}
+
+function redrawAnnotationDraft() {
+    clearGroupChildren(annotationDraftGroup);
+    const pts3 = state.annotate.draftPoints.map((p) => p.three);
+    const colorInt = colorToInt(state.annotate.color);
+    if (pts3.length === 1) {
+        addAnnotationMarker(annotationDraftGroup, pts3[0], colorInt, 0.9);
+    } else if (pts3.length > 1) {
+        addAnnotationLine(annotationDraftGroup, pts3, colorInt, 0.9);
+        addAnnotationMarker(annotationDraftGroup, pts3[0], colorInt, 0.9);
+        addAnnotationMarker(annotationDraftGroup, pts3[pts3.length - 1], colorInt, 0.9);
+    }
+}
+
+function beginAnnotationDraft(clientX, clientY) {
+    state.annotate.draftPoints = [];
+    clearGroupChildren(annotationDraftGroup);
+    const hit = raycastAnnotationPoint(clientX, clientY);
+    if (hit) {
+        state.annotate.draftPoints.push(hit);
+        redrawAnnotationDraft();
+    }
+}
+function extendAnnotationDraft(clientX, clientY) {
+    const hit = raycastAnnotationPoint(clientX, clientY);
+    if (!hit) return;
+    const pts = state.annotate.draftPoints;
+    const last = pts[pts.length - 1];
+    if (last) {
+        const dx = hit.three.x - last.three.x, dy = hit.three.y - last.three.y, dz = hit.three.z - last.three.z;
+        const minStep = Math.max(sceneBounds.radius * 0.012, 0.6);
+        if (Math.sqrt(dx * dx + dy * dy + dz * dz) < minStep) return;
+    }
+    if (pts.length >= 500) return;
+    pts.push(hit);
+    redrawAnnotationDraft();
+}
+function finishAnnotationDraft() {
+    if (!state.annotate.draftPoints.length) return;
+    annotationCompose.style.display = 'block';
+    annotationText.value = '';
+    annotationError.textContent = '';
+    annotationText.focus();
+    annotateStatus.textContent = state.annotate.draftPoints.length > 1
+        ? state.annotate.draftPoints.length + '-point highlight stroke ready - add a note and save.'
+        : 'Pin placed - add a note and save.';
+}
+function discardAnnotationDraft() {
+    state.annotate.draftPoints = [];
+    clearGroupChildren(annotationDraftGroup);
+    annotationCompose.style.display = 'none';
+    annotateStatus.textContent = state.annotate.active
+        ? 'Click for a pin, or click-and-drag to paint a highlight stroke.'
+        : 'Click "Highlight / Draw", then click for a pin or click-and-drag to paint a highlight stroke.';
+}
+
+function renderSavedAnnotation(ann) {
+    const group = new THREE.Group();
+    const colorInt = colorToInt(ann.color);
+    const pts3 = ann.points_mm.map((p) => new THREE.Vector3(...patientToThree(p)));
+    if (pts3.length === 1) {
+        addAnnotationMarker(group, pts3[0], colorInt, 1);
+    } else {
+        addAnnotationLine(group, pts3, colorInt, 1);
+        addAnnotationMarker(group, pts3[0], colorInt, 1);
+        addAnnotationMarker(group, pts3[pts3.length - 1], colorInt, 1);
+    }
+    annotationGroup.add(group);
+    ann._three = { group, center: pts3[Math.floor(pts3.length / 2)] };
+}
+
+function renderAnnotationList() {
+    if (!state.annotations.length) {
+        annotationList.textContent = 'No annotations saved yet.';
+        return;
+    }
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    annotationList.innerHTML = state.annotations.map((a) => (
+        '<div style="display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid #1c2536;">'
+        + '<span style="width:12px;height:12px;border-radius:50%;flex:none;margin-top:3px;background:' + esc(a.color) + ';"></span>'
+        + '<div style="flex:1;min-width:0;">'
+        + '<div style="color:#cbd5e1;">' + esc(a.text) + '</div>'
+        + '<div style="font-size:0.72rem;color:#64748b;">' + (a.kind === 'stroke' ? 'Highlight stroke' : 'Pin')
+        + ' &middot; ' + new Date(a.created_at).toLocaleString() + '</div></div>'
+        + '<button class="small-btn" data-locate="' + a.id + '">Locate</button>'
+        + '<button class="small-btn" data-delete="' + a.id + '">Delete</button>'
+        + '</div>'
+    )).join('');
+    annotationList.querySelectorAll('[data-locate]').forEach((btn) => {
+        btn.addEventListener('click', () => locateAnnotation(btn.getAttribute('data-locate')));
+    });
+    annotationList.querySelectorAll('[data-delete]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteAnnotation(btn.getAttribute('data-delete')));
+    });
+}
+
+function locateAnnotation(id) {
+    const ann = state.annotations.find((a) => a.id === id);
+    if (!ann || !ann._three) return;
+    const center = ann._three.center;
+    const dist = Math.max(sceneBounds.radius * 1.0, 20);
+    const dir = camera.position.clone().sub(controls.target).normalize();
+    camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
+    controls.target.copy(center);
+    controls.update();
+}
+
+async function loadAnnotations() {
+    clearGroupChildren(annotationGroup);
+    try {
+        const r = await fetch(API('/annotations'));
+        const data = await r.json();
+        if (!r.ok) return;
+        state.annotations = data.annotations || [];
+        state.annotations.forEach(renderSavedAnnotation);
+    } catch (err) {
+        console.error('Failed to load annotations', err);
+    }
+    renderAnnotationList();
+}
+
+async function saveAnnotationDraft() {
+    const text = annotationText.value.trim();
+    if (!text) {
+        annotationError.textContent = 'Enter a note describing what you noticed before saving.';
+        return;
+    }
+    const points = state.annotate.draftPoints.map((p) => [p.patient[0], p.patient[1], p.patient[2]]);
+    const payload = { text, color: state.annotate.color };
+    if (points.length <= 1) payload.points_mm = points[0];
+    else payload.stroke_points_mm = points;
+
+    annotationError.textContent = '';
+    try {
+        const r = await fetch(API('/annotations'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await r.json();
+        if (!r.ok) {
+            annotationError.textContent = data.message || 'Could not save annotation.';
+            return;
+        }
+        discardAnnotationDraft();
+        await loadAnnotations();
+    } catch (err) {
+        annotationError.textContent = 'Network error while saving: ' + err.message;
+    }
+}
+
+async function deleteAnnotation(id) {
+    if (!confirm('Delete this annotation?')) return;
+    try {
+        const r = await fetch(API('/annotations/' + id), { method: 'DELETE' });
+        if (!r.ok && r.status !== 404) return;
+        await loadAnnotations();
+    } catch (err) {
+        console.error('Failed to delete annotation', err);
+    }
+}
+
+// ---------------------------------------------------------------------------
 // View presets
 // ---------------------------------------------------------------------------
 function applyPreset(name) {
@@ -1882,6 +2142,8 @@ segmentBtn.addEventListener('click', async () => {
         controls3dSecondary.style.display = 'flex';
         clipControls.style.display = 'flex';
         measureBar.style.display = 'flex';
+        annotationPanel.style.display = 'block';
+        await loadAnnotations();
     } catch (err) {
         setStep('mesh', 'failed');
         showError('3D reconstruction failed: ' + err.message);
@@ -1968,6 +2230,23 @@ document.getElementById('clearMeasureBtn').addEventListener('click', () => {
     state.measure.points = [];
     measureReadout.textContent = 'Click "Measure", then two points on the model.';
 });
+
+document.getElementById('annotateBtn').addEventListener('click', (e) => {
+    state.annotate.active = !state.annotate.active;
+    e.target.classList.toggle('active', state.annotate.active);
+    if (controls) controls.enabled = !state.annotate.active;
+    if (!state.annotate.active) discardAnnotationDraft();
+    annotateStatus.textContent = state.annotate.active
+        ? 'Click for a pin, or click-and-drag to paint a highlight stroke.'
+        : 'Click "Highlight / Draw", then click for a pin or click-and-drag to paint a highlight stroke.';
+});
+document.getElementById('annotateColor').addEventListener('input', (e) => {
+    state.annotate.color = e.target.value;
+    if (state.annotate.draftPoints.length) redrawAnnotationDraft();
+});
+document.getElementById('clearAnnotateDraftBtn').addEventListener('click', () => discardAnnotationDraft());
+document.getElementById('annotationCancelBtn').addEventListener('click', () => discardAnnotationDraft());
+document.getElementById('annotationSaveBtn').addEventListener('click', () => saveAnnotationDraft());
 
 document.getElementById('screenshot3dBtn').addEventListener('click', () => {
     if (!renderer) return;

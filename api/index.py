@@ -1,5 +1,7 @@
 import io
 import os
+import re
+import math
 import uuid
 import base64
 import sys
@@ -1741,30 +1743,81 @@ def delete_measurement_endpoint(study_id, measurement_id):
     return jsonify({'status': 'OK'})
 
 
+ANNOTATION_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+# Generous bound on any single coordinate magnitude - real patient-space mm
+# for a torso CT is at most a few hundred mm from origin; this is a
+# malformed-request guard, not a clinical constraint.
+MAX_ANNOTATION_COORD_MM = 5000.0
+
+
+def _validate_points_mm(points):
+    """Raises ValueError with a clear message if `points` isn't a non-empty
+    list of finite, in-range [x, y, z] triples. Used for BOTH a single pin
+    and a multi-point freehand stroke - see models.Annotation's docstring
+    for why these are trusted as already-real coordinates rather than
+    voxel indices."""
+    if not isinstance(points, list) or not points:
+        raise ValueError('points_mm must be a non-empty list of [x, y, z] points.')
+    if len(points) > 500:
+        raise ValueError('A single stroke may not have more than 500 points.')
+    cleaned = []
+    for p in points:
+        if not isinstance(p, (list, tuple)) or len(p) != 3:
+            raise ValueError('Each point must be [x, y, z].')
+        try:
+            xyz = [float(v) for v in p]
+        except (TypeError, ValueError):
+            raise ValueError('Each coordinate must be a number.')
+        if any(math.isnan(v) or math.isinf(v) or abs(v) > MAX_ANNOTATION_COORD_MM for v in xyz):
+            raise ValueError('A coordinate is out of the plausible physical range.')
+        cleaned.append(xyz)
+    return cleaned
+
+
 @app.route('/api/dicom/study/<study_id>/annotations', methods=['POST'])
 @authmod.api_login_required
 def create_annotation_endpoint(study_id):
+    """Creates a pin (one point) or a freehand highlight stroke (many
+    points). Three ways to supply the location:
+      - `voxel`: [x, y, z] 2D-slice voxel indices - server resolves to mm.
+      - `points_mm`: a single already-mm point, from a 3D mesh raycast.
+      - `stroke_points_mm`: a list of already-mm points, a drawn stroke.
+    Exactly one of these must be given.
+    """
     study, err = _get_owned_study_or_error(study_id)
     if err:
         return err
     doctor = authmod.current_doctor()
     data = request.get_json(silent=True) or {}
     text = data.get('text')
-    voxel = data.get('voxel')  # optional [x, y, z]
+    voxel = data.get('voxel')
+    point_mm = data.get('points_mm')
+    stroke_points_mm = data.get('stroke_points_mm')
+    color = data.get('color')
 
-    position_mm = None
-    if voxel is not None:
-        try:
+    if color is not None and not ANNOTATION_COLOR_RE.match(color):
+        return jsonify({'status': 'FAIL', 'message': 'color must be a #RRGGBB hex string.'}), 400
+
+    supplied = [v for v in (voxel, point_mm, stroke_points_mm) if v is not None]
+    if len(supplied) != 1:
+        return jsonify({'status': 'FAIL', 'message':
+                         'Supply exactly one of voxel, points_mm, or stroke_points_mm.'}), 400
+
+    try:
+        if voxel is not None:
             x, y, z = int(voxel[0]), int(voxel[1]), int(voxel[2])
-            position_mm, _hu = _voxel_to_world_and_hu(study, x, y, z)
-            position_mm = list(position_mm)
-        except (TypeError, IndexError, ValueError) as exc:
-            return jsonify({'status': 'FAIL', 'message': str(exc) or
-                             'voxel must be [x, y, z] integers within the volume.'}), 400
+            world, _hu = _voxel_to_world_and_hu(study, x, y, z)
+            points = [list(world)]
+        elif point_mm is not None:
+            points = _validate_points_mm([point_mm])
+        else:
+            points = _validate_points_mm(stroke_points_mm)
+    except (TypeError, IndexError, ValueError) as exc:
+        return jsonify({'status': 'FAIL', 'message': str(exc) or 'Invalid point data.'}), 400
 
     try:
         annotation_id = measmod.create_annotation(
-            study_id, text, created_by_doctor_id=doctor['id'], position_mm=position_mm)
+            study_id, text, created_by_doctor_id=doctor['id'], points_mm=points, color=color)
     except ValueError as exc:
         return jsonify({'status': 'FAIL', 'message': str(exc)}), 400
     except Exception as exc:  # noqa: BLE001

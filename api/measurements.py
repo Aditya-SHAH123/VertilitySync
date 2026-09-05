@@ -251,14 +251,22 @@ def delete_measurement(measurement_id, created_by_doctor_id):
 # Annotations
 # ---------------------------------------------------------------------------
 
-def create_annotation(study_id, text, created_by_doctor_id, position_mm=None):
+DEFAULT_ANNOTATION_COLOR = "#e8a33d"
+
+def create_annotation(study_id, text, created_by_doctor_id, points_mm, color=None):
+    """points_mm: a list of >=1 [x, y, z] patient-space millimetre points -
+    one point is a pin, more than one is a freehand highlight stroke. Every
+    point must already be validated (finite, in-range) by the caller - see
+    index.py's _validate_points_mm; this function trusts its input."""
     text = (text or "").strip()
     if not text:
         raise ValueError("Annotation text cannot be empty.")
+    if not points_mm:
+        raise ValueError("At least one point is required.")
     with get_session() as s:
         a = Annotation(
             study_id=study_id, text=text, created_by_doctor_id=created_by_doctor_id,
-            position_json=json.dumps(position_mm) if position_mm is not None else None,
+            points_json=json.dumps(points_mm), color=color or DEFAULT_ANNOTATION_COLOR,
         )
         s.add(a)
         s.flush()
@@ -268,7 +276,9 @@ def create_annotation(study_id, text, created_by_doctor_id, position_mm=None):
 def _annotation_to_dict(a):
     return {
         "id": a.id, "study_id": a.study_id, "text": a.text,
-        "position_mm": json.loads(a.position_json) if a.position_json else None,
+        "points_mm": json.loads(a.points_json),
+        "kind": "pin" if len(json.loads(a.points_json)) <= 1 else "stroke",
+        "color": a.color,
         "created_by_doctor_id": a.created_by_doctor_id,
         "created_at": _dt(a.created_at), "updated_at": _dt(a.updated_at),
     }
