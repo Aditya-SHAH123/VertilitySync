@@ -347,6 +347,40 @@ def patient_workspace_page(patient_id):
                             patient=patientsmod.patient_to_dict(patient))
 
 
+@app.route('/patients/<int:patient_id>/print')
+@authmod.login_required
+def patient_print_page(patient_id):
+    """Print/PDF-export view: a single self-contained page combining
+    diagnoses, latest vitals, scan history, and recent notes, meant to be
+    exported via the browser's own print-to-PDF - no new dependency, no
+    server-side PDF library, no rendering-fidelity risk. Same ownership
+    check as the main workspace page; nothing here is computed differently,
+    only laid out for print."""
+    patient, err = _get_owned_patient_or_error(patient_id)
+    if err:
+        abort(404)
+    doctor = authmod.current_doctor()
+
+    studies = patientsmod.list_studies_for_patient(patient_id)
+    diagnoses = patientsmod.list_diagnoses(patient_id)
+    vitals = patientsmod.list_vital_signs(patient_id)
+    notes = patientsmod.list_notes(patient_id)
+
+    dbmod.record_audit('patient_summary_printed', doctor_id=doctor['id'],
+                        target_type='patient', target_id=patient_id, ip=authmod.client_ip())
+
+    return render_template(
+        'patient_print.html',
+        patient=patientsmod.patient_to_dict(patient),
+        doctor_name=doctor['display_name'],
+        studies=[patientsmod.study_to_dict(s) for s in studies],
+        diagnoses=[patientsmod.diagnosis_to_dict(d) for d in diagnoses],
+        vitals=[patientsmod.vital_signs_to_dict(v) for v in vitals],
+        notes=[patientsmod.note_to_dict(n) for n in notes],
+        generated_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
 @app.route('/viewer/<study_id>')
 @authmod.login_required
 def viewer(study_id):

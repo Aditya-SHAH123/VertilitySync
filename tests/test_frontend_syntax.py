@@ -134,6 +134,7 @@ def main():
         ('home.html (/home)', '/home', True, False),
         ('patients.html (/patients)', '/patients', True, False),
         ('patient_workspace.html (/patients/<id>)', f'/patients/{patient["id"]}', True, False),
+        ('patient_print.html (/patients/<id>/print)', f'/patients/{patient["id"]}/print', True, False),
     ]
 
     for label, path, expect_scripts, anonymous in pages:

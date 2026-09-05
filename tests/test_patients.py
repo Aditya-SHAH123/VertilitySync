@@ -440,6 +440,19 @@ def main():
     r = other_client.get('/api/patients/' + str(patient_id) + '/diagnoses')
     check("another doctor's diagnoses listing on this patient -> 404", r.status_code == 404, r.status_code)
 
+    # ---------------- printable summary ----------------
+    r = client.get('/patients/' + str(patient_id) + '/print')
+    check('print summary page loads for the owner -> 200', r.status_code == 200, r.status_code)
+    check('print summary includes the patient name', b'Sarah Miller' in r.data)
+    check('print summary includes the diagnosis recorded earlier', b'Idiopathic pulmonary fibrosis' in r.data)
+    # The heart-rate reading was deleted earlier in this test; the
+    # temperature-only reading is the one still on file.
+    check('print summary includes the vitals recorded earlier', b'37.1' in r.data)
+    check('print summary includes the scan history', b'Chest' in r.data or b'CT' in r.data)
+    check('print summary states this is not a certified medical device', b'not a certified' in r.data)
+    r = other_client.get('/patients/' + str(patient_id) + '/print')
+    check("another doctor cannot print this patient's summary -> 404", r.status_code == 404, r.status_code)
+
     # ---------------- archive ----------------
     r = client.post('/api/patients/' + str(patient_id) + '/archive', json={'archived': True})
     check('archive patient -> 200', r.status_code == 200, r.status_code)
