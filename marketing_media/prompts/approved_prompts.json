@@ -51,6 +51,15 @@
       "aspect_ratio": "16:9",
       "review_status": "approved",
       "prompt": "Abstract dark graphite background texture suggesting fine volumetric medical imaging data density, extremely subtle tonal gradient, restrained and non-distracting, premium technology presentation backdrop, no anatomy, no text, no patient identifiers, no logos, no diagnostic information."
+    },
+    {
+      "id": "roadmap_layers_concept",
+      "section": "faq_roadmap",
+      "media_type": "image",
+      "aspect_ratio": "4:3",
+      "review_status": "approved",
+      "usage_note": "For the safety.html FAQ answer on future plans ONLY. Must be captioned on-page as a concept illustration, not a screenshot of a working feature - none of what it depicts (airway/vessel layers) is implemented. See NOT YET IMPLEMENTED framing already used elsewhere on this page.",
+      "prompt": "Restrained scientific concept sketch on a dark graphite background: a smooth solid three-dimensional lung surface model with faint translucent wireframe-style overlays suggesting additional anatomical layers - a subtle branching airway-like structure and a subtle branching vessel-like structure sketched as thin outlined hints rather than solid detail, conveying an early concept for a future capability rather than a finished result, premium medical technology presentation, clean negative space, no text, no patient identifiers, no labels, no annotations, no diagnostic information."
     }
   ]
 }

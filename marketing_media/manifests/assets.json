@@ -26,6 +26,16 @@
       "notes": "First generation attempt (original approved prompt) produced an unusable surreal result and was discarded, not saved. This asset is from the REVISED prompt (see approved_prompts.json revision_note/superseded_prompt for coordinate_link_visual), reviewed visually before use. Embedded as an inline base64 data URI in templates/index.html (Coordinate mapping section).",
       "classification": "public-marketing-media",
       "derived_from_patient_data": false
+    },
+    {
+      "prompt_id": "roadmap_layers_concept",
+      "asset_path": "marketing_media/assets/roadmap_layers_concept.webp",
+      "media_type": "image",
+      "poster": null,
+      "reviewed_by": "assistant-session-2026-09-05",
+      "notes": "Generated via Higgsfield z_image, reviewed visually. Used ONLY in the safety.html FAQ answer about future plans, explicitly captioned on-page as a concept illustration - none of what it depicts (airway/vessel layers) is an implemented feature. Embedded as an inline base64 data URI, not a separate static file.",
+      "classification": "public-marketing-media",
+      "derived_from_patient_data": false
     }
   ]
 }
